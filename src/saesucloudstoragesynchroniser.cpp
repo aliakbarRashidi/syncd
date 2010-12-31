@@ -11,7 +11,7 @@
 SaesuCloudStorageSynchroniser::SaesuCloudStorageSynchroniser(QObject *parent, QTcpSocket *socket)
     : QObject(parent)
     , mBytesExpected(0)
-    , mState(Introduction)
+    , mState(Unknown)
 {
     if (socket) {
         mSocket = socket;
@@ -49,7 +49,7 @@ void SaesuCloudStorageSynchroniser::sendCommand(quint8 token, const QByteArray &
 void SaesuCloudStorageSynchroniser::changeState()
 {
     switch (mState) {
-    case Introduction:
+    case Unknown:
         mState = DeleteList;
         sDebug() << "Sending delete list";
         changeState();
