@@ -11,7 +11,7 @@
 SaesuCloudStorageSynchroniser::SaesuCloudStorageSynchroniser(QObject *parent, QTcpSocket *socket)
     : QObject(parent)
     , mBytesExpected(0)
-    , mState(Unknown)
+    , mState(Introduction)
 {
     if (socket) {
         mSocket = socket;
@@ -60,18 +60,16 @@ void SaesuCloudStorageSynchroniser::changeState()
 
         QByteArray data;
         QDataStream stream(&data, QIODevice::WriteOnly);
+        mCurrentCloud = SCloudStorage::instance("test"); // TODO: dynamic picking
         stream << QString("test"); // TODO: make this be picked dynamically
         stream << (quint32)mCurrentCloud->itemUUIDs().count();
 
         foreach (const QByteArray &uuid, mCurrentCloud->itemUUIDs()) {
-            QString itemHash = mCurrentCloud->hash(uuid);
-            quint64 itemTS = mCurrentCloud->modifiedAt(uuid);
+            SCloudItem *item = mCurrentCloud->item(uuid);
 
             stream << uuid;
-            stream << itemHash;
-            stream << itemTS;
-
-            sDebug() << "Sending item: " << uuid;
+            stream << item->mHash;
+            stream << item->mTimeStamp;
         }
 
         sendCommand(ObjectListCommand, data);
@@ -126,7 +124,7 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
 
             for (quint32 i = 0; i < itemCount; ++i) {
                 QByteArray uuid;
-                QString itemHash;
+                QByteArray itemHash;
                 quint64 itemTS;
 
                 stream >> uuid;
@@ -137,10 +135,13 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
                 if (!mCurrentCloud->hasItem(uuid)) {
                     sDebug() << "Item " << uuid.toHex() << " not found; requesting";
                     requestItem = true;
-                } else if (mCurrentCloud->hash(uuid) != itemHash ||
-                           mCurrentCloud->modifiedAt(uuid) != itemTS) {
-                    sDebug() << "Modified item " << uuid.toHex() << " detected, requesting";
-                    requestItem = true;
+                } else {
+                    SCloudItem *item = mCurrentCloud->item(uuid);
+                    if (item->mHash != itemHash ||
+                        item->mTimeStamp != itemTS) {
+                        sDebug() << "Modified item " << uuid.toHex() << " detected, requesting";
+                        requestItem = true;
+                    }
                 }
 
                 if (requestItem) {
@@ -166,6 +167,7 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
             QByteArray sendingData;
             QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
 
+            sendingStream << cloudName;
             sendingStream << uuid;
             sendingStream << *(mCurrentCloud->item(uuid));
             sendCommand(ObjectReplyCommand, sendingData);

@@ -53,7 +53,6 @@ private:
 
     enum State
     {
-        Unknown,
         Introduction,
         DeleteList,
         ObjectList
