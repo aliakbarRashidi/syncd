@@ -41,12 +41,12 @@ private:
         // listing all objects and metadata
         // quint32: <objectCount>
         // for count iterations:
-        //  QUuid: object uuid
+        //  QByteArray: object uuid
         //  QString: object hash
         //  quint64: object timestamp
         ObjectListCommand = 0x1,
 
-        // QUuid: object uuid to request
+        // QByteArray: object uuid to request
         ObjectRequestCommand = 0x2,
 
         // format should follow SCloudItem, see libsaesu's scloudstorage_p.h

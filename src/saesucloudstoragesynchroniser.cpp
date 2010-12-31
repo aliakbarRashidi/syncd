@@ -73,7 +73,7 @@ void SaesuCloudStorageSynchroniser::changeState()
         QDataStream stream(&data, QIODevice::WriteOnly);
         stream << (quint32)mCurrentCloud->itemUUIDs().count();
 
-        foreach (const QUuid &uuid, mCurrentCloud->itemUUIDs()) {
+        foreach (const QByteArray &uuid, mCurrentCloud->itemUUIDs()) {
             QString itemHash = mCurrentCloud->hash(uuid);
             quint64 itemTS = mCurrentCloud->modifiedAt(uuid);
 
@@ -147,8 +147,8 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
 
             sDebug() << itemCount << " items";
 
-            for (int i = 0; i < itemCount; ++i) {
-                QUuid uuid;
+            for (quint32 i = 0; i < itemCount; ++i) {
+                QByteArray uuid;
                 QString itemHash;
                 quint64 itemTS;
 
@@ -159,7 +159,7 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
                 sDebug() << "Got item: " << uuid;
 
                 //if (!mCurrentCloud->hasItem(uuid)) {
-                    sDebug() << "Item " << uuid << " not found; requesting";
+                    sDebug() << "Item " << uuid.toHex() << " not found; requesting";
                     QByteArray sendingData;
                     QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
 
@@ -176,13 +176,14 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
                 return;
             }
 
-            QUuid uuid;
+            QByteArray uuid;
             stream >> uuid;
             sDebug() << "Unknown object request for " << uuid << " recieved; sending";
 
             QByteArray sendingData;
             QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
 
+            sendingStream << uuid;
             sendingStream << *(mCurrentCloud->item(uuid));
             sendCommand(ObjectReplyCommand, sendingData);
             }
@@ -194,9 +195,11 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
                 return;
             }
 
+            QByteArray uuid;
             SCloudItem *item = new SCloudItem;
+            stream >> uuid;
             stream >> *item;
-            mCurrentCloud->insertItem(item);
+            mCurrentCloud->insertItem(uuid, item);
             }
             break;
         default:
