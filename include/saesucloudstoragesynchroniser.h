@@ -32,25 +32,23 @@ private:
 
     enum CommandTokens
     {
-        // used to select a cloud to synchronise
-        // creates if it doesn't exist already
-        // should be sent by the client only
-        // QString: <cloudname>
-        SelectCloudCommand = 0x0,
-
         // listing all objects and metadata
+        // QString: <cloudName>
         // quint32: <objectCount>
         // for count iterations:
         //  QByteArray: object uuid
         //  QString: object hash
         //  quint64: object timestamp
-        ObjectListCommand = 0x1,
+        ObjectListCommand = 0x0,
 
+        // QString: <cloudName>
         // QByteArray: object uuid to request
-        ObjectRequestCommand = 0x2,
+        ObjectRequestCommand = 0x1,
 
-        // format should follow SCloudItem, see libsaesu's scloudstorage_p.h
-        ObjectReplyCommand = 0x3
+        // QString: <cloudName>
+        // QByteArray <uuid>
+        // SCloudItem <item>, see libsaesu for exact formatting
+        ObjectReplyCommand = 0x2
     };
 
     enum State

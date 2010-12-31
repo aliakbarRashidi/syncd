@@ -49,17 +49,6 @@ void SaesuCloudStorageSynchroniser::sendCommand(quint8 token, const QByteArray &
 void SaesuCloudStorageSynchroniser::changeState()
 {
     switch (mState) {
-    case Unknown: {
-        mState = Introduction;
-        sDebug() << "Sending introduction";
-
-        QByteArray data;
-        QDataStream stream(&data, QIODevice::WriteOnly);
-
-        stream << QString("test"); // TODO: make it dynamically pick cloud names
-        sendCommand(SelectCloudCommand, data);
-        }
-        break;
     case Introduction:
         mState = DeleteList;
         sDebug() << "Sending delete list";
@@ -71,6 +60,7 @@ void SaesuCloudStorageSynchroniser::changeState()
 
         QByteArray data;
         QDataStream stream(&data, QIODevice::WriteOnly);
+        stream << QString("test"); // TODO: make this be picked dynamically
         stream << (quint32)mCurrentCloud->itemUUIDs().count();
 
         foreach (const QByteArray &uuid, mCurrentCloud->itemUUIDs()) {
@@ -121,22 +111,10 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
     stream >> command;
 
     switch (command) {
-        case SelectCloudCommand: {
+        case ObjectListCommand: {
             QString cloudName;
             stream >> cloudName;
-
-            sDebug() << "Synchronising for " << cloudName;
-            sDebug() << *(bytes.begin() + 4);
             mCurrentCloud = SCloudStorage::instance(cloudName);
-            changeState();
-            }
-            break;
-        case ObjectListCommand: {
-            if (!mCurrentCloud) {
-                sDebug() << "Got a command with no selected cloud";
-                mSocket->disconnectFromHost();
-                return;
-            }
 
             // sending a message, find message
             sDebug() << "Processing an object list";
@@ -169,6 +147,7 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
                     QByteArray sendingData;
                     QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
 
+                    sendingStream << mCurrentCloud->cloudName();
                     sendingStream << uuid;
                     sendCommand(ObjectRequestCommand, sendingData);
                 }
@@ -176,11 +155,9 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
             }
             break;
         case ObjectRequestCommand: {
-            if (!mCurrentCloud) {
-                sDebug() << "Got a command with no selected cloud";
-                mSocket->disconnectFromHost();
-                return;
-            }
+            QString cloudName;
+            stream >> cloudName;
+            mCurrentCloud = SCloudStorage::instance(cloudName);
 
             QByteArray uuid;
             stream >> uuid;
@@ -195,11 +172,9 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
             }
             break;
         case ObjectReplyCommand: {
-            if (!mCurrentCloud) {
-                sDebug() << "Got a command with no selected cloud";
-                mSocket->disconnectFromHost();
-                return;
-            }
+            QString cloudName;
+            stream >> cloudName;
+            mCurrentCloud = SCloudStorage::instance(cloudName);
 
             QByteArray uuid;
             SCloudItem remoteItem;
