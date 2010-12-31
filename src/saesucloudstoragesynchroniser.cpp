@@ -196,10 +196,10 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
             }
 
             QByteArray uuid;
-            SCloudItem *item = new SCloudItem;
+            SCloudItem item;
             stream >> uuid;
-            stream >> *item;
-            mCurrentCloud->insertItem(uuid, item);
+            stream >> item;
+            mCurrentCloud->insertItem(uuid, &item);
             }
             break;
         default:
