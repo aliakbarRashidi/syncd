@@ -202,35 +202,37 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
             }
 
             QByteArray uuid;
-            SCloudItem item;
+            SCloudItem remoteItem;
             stream >> uuid;
-            stream >> item;
+            stream >> remoteItem;
 
             if (!mCurrentCloud->hasItem(uuid)) {
-                mCurrentCloud->insertItem(uuid, &item);
+                mCurrentCloud->insertItem(uuid, &remoteItem);
             } else {
+                SCloudItem *localItem = mCurrentCloud->item(uuid);
+
                 // find out which is the newer item
-                if (mCurrentCloud->modifiedAt(uuid) > item.mTimeStamp) {
+                if (localItem->mTimeStamp > remoteItem.mTimeStamp) {
                     // ours is newer, ignore theirs
                     sDebug() << "For modified item " << uuid.toHex() << ", using ours on TS";
-                } else if (mCurrentCloud->modifiedAt(uuid) == item.mTimeStamp) {
+                } else if (localItem->mTimeStamp == remoteItem.mTimeStamp) {
 
                     // identical, resort to alphabetically superior SHA to force a compromise
-                    if (mCurrentCloud->hash(uuid) > item.mHash) {
+                    if (localItem->mHash > remoteItem.mHash) {
                         // ours is alphabetically superior, ignore theirs
                         sDebug() << "For modified item " << uuid.toHex() << " using ours on hash";
-                    } else if (mCurrentCloud->hash(uuid) == item.mHash) {
+                    } else if (localItem->mHash == remoteItem.mHash) {
                         // what else can we realistically do?
                         sWarning() << "Identical hashes but differing timestamps detected for " << uuid.toHex() << ", data state now inconsistent!";
-                    } else if (mCurrentCloud->hash(uuid) < item.mHash) {
+                    } else if (localItem->mHash < remoteItem.mHash) {
                         // take theirs
                         sDebug() << "For modified item " << uuid.toHex() << " using theirs on hash";
-                        mCurrentCloud->insertItem(uuid, &item);
+                        mCurrentCloud->insertItem(uuid, &remoteItem);
                     }
-                } else if (mCurrentCloud->modifiedAt(uuid) < item.mTimeStamp) {
+                } else if (localItem->mTimeStamp < remoteItem.mTimeStamp) {
                     // theirs wins
                     sDebug() << "For modified item " << uuid.toHex() << " using theirs on TS";
-                    mCurrentCloud->insertItem(uuid, &item);
+                    mCurrentCloud->insertItem(uuid, &remoteItem);
                 }
             }
             }
