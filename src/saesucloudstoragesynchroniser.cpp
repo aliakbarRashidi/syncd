@@ -155,16 +155,23 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
                 stream >> itemHash;
                 stream >> itemTS;
 
-                sDebug() << "Got item: " << uuid;
-
-                //if (!mCurrentCloud->hasItem(uuid)) {
+                bool requestItem = false;
+                if (!mCurrentCloud->hasItem(uuid)) {
                     sDebug() << "Item " << uuid.toHex() << " not found; requesting";
+                    requestItem = true;
+                } else if (mCurrentCloud->hash(uuid) != itemHash ||
+                           mCurrentCloud->modifiedAt(uuid) != itemTS) {
+                    sDebug() << "Modified item " << uuid.toHex() << " detected, requesting";
+                    requestItem = true;
+                }
+
+                if (requestItem) {
                     QByteArray sendingData;
                     QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
 
                     sendingStream << uuid;
                     sendCommand(ObjectRequestCommand, sendingData);
-                //}
+                }
             }
             }
             break;
@@ -177,7 +184,7 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
 
             QByteArray uuid;
             stream >> uuid;
-            sDebug() << "Unknown object request for " << uuid << " recieved; sending";
+            sDebug() << "Object request for " << uuid.toHex() << " recieved; sending";
 
             QByteArray sendingData;
             QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
@@ -198,7 +205,34 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
             SCloudItem item;
             stream >> uuid;
             stream >> item;
-            mCurrentCloud->insertItem(uuid, &item);
+
+            if (!mCurrentCloud->hasItem(uuid)) {
+                mCurrentCloud->insertItem(uuid, &item);
+            } else {
+                // find out which is the newer item
+                if (mCurrentCloud->modifiedAt(uuid) > item.mTimeStamp) {
+                    // ours is newer, ignore theirs
+                    sDebug() << "For modified item " << uuid.toHex() << ", using ours on TS";
+                } else if (mCurrentCloud->modifiedAt(uuid) == item.mTimeStamp) {
+
+                    // identical, resort to alphabetically superior SHA to force a compromise
+                    if (mCurrentCloud->hash(uuid) > item.mHash) {
+                        // ours is alphabetically superior, ignore theirs
+                        sDebug() << "For modified item " << uuid.toHex() << " using ours on hash";
+                    } else if (mCurrentCloud->hash(uuid) == item.mHash) {
+                        // what else can we realistically do?
+                        sWarning() << "Identical hashes but differing timestamps detected for " << uuid.toHex() << ", data state now inconsistent!";
+                    } else if (mCurrentCloud->hash(uuid) < item.mHash) {
+                        // take theirs
+                        sDebug() << "For modified item " << uuid.toHex() << " using theirs on hash";
+                        mCurrentCloud->insertItem(uuid, &item);
+                    }
+                } else if (mCurrentCloud->modifiedAt(uuid) < item.mTimeStamp) {
+                    // theirs wins
+                    sDebug() << "For modified item " << uuid.toHex() << " using theirs on TS";
+                    mCurrentCloud->insertItem(uuid, &item);
+                }
+            }
             }
             break;
         default:
