@@ -115,7 +115,6 @@ void SaesuCloudStorageSynchroniser::onReadyRead()
 
 void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
 {
-    sDebug() << "Processing " << bytes.toHex();
     QDataStream stream(bytes);
 
     quint8 command;
