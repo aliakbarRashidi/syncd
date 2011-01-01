@@ -208,9 +208,21 @@ void SaesuCloudStorageSynchroniser::processObjectReply(QDataStream &stream)
                 // ours is alphabetically superior, ignore theirs
                 sDebug() << "For modified item " << uuid.toHex() << " using ours on hash";
             } else if (localItem->mHash == remoteItem.mHash) {
-                sWarning() << "Identical hashes but differing timestamps detected for " << uuid.toHex() << ", data state now inconsistent!";
-                sWarning() << "My timestamp: " << localItem->mTimeStamp;
-                sWarning() << "Remote timestamp: " << remoteItem.mTimeStamp;
+                // in the case of two connected clients, A and B,
+                // A may add an item, send a change notification (via object list) to B
+                // B will request the item, add it, which will trigger a
+                // local create notification on B, which will then result in a remote notification
+                // to A.
+                //
+                // This is actually desired (if slightly annoying) behaviour, because it allows
+                // items to propegate around the mesh more fully, as an instant notification,
+                // (think of situations where B actually has more than one other syncd connected)
+                //
+                // Of course, we could get here in the case that two items both hash to the same
+                // sha1, but let's just hope that never ever happens.
+                //
+                // TODO: we could be neurotic, and check data A == data B
+                // (and if not, use the alphabetically superior like other parts of collision resolution)
             } else if (localItem->mHash < remoteItem.mHash) {
                 // take theirs
                 sDebug() << "For modified item " << uuid.toHex() << " using theirs on hash";
