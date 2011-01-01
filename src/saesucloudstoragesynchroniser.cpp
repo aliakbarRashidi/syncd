@@ -62,13 +62,19 @@ void SaesuCloudStorageSynchroniser::startSync()
 
 void SaesuCloudStorageSynchroniser::syncCloud(const QString &cloudName)
 {
+    SCloudStorage *cloud = SCloudStorage::instance(cloudName);
+
+    // connect signals for future updates
+    connect(cloud, SIGNAL(changed(QByteArray,QString)), SLOT(onAddedOrChanged(QByteArray)));
+    connect(cloud, SIGNAL(created(QByteArray)), SLOT(onAddedOrChanged(QByteArray)));
+    connect(cloud, SIGNAL(destroyed(QByteArray)), SLOT(onDestroyed(QByteArray)));
+
     sDebug() << "Sending delete list";
 
     sDebug() << "Sending object list";
 
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
-    SCloudStorage *cloud = SCloudStorage::instance(cloudName);
     stream << cloud->cloudName();
     stream << (quint32)cloud->itemUUIDs().count();
 
@@ -249,4 +255,32 @@ void SaesuCloudStorageSynchroniser::onDisconnected()
 {
     sDebug() << "Connection closed";
     deleteLater();
+}
+
+void SaesuCloudStorageSynchroniser::onAddedOrChanged(const QByteArray &uuid)
+{
+    SCloudStorage *cloud = qobject_cast<SCloudStorage *>(sender());
+    if (S_VERIFY(cloud, "no cloud as sender? huh?"))
+        return;
+
+    // send an object list with just this item in it
+    // the other side will then send an object request to get the changes
+    // this isn't necessarily the 'best' way to do this, but it works
+    sDebug() << "Sending remote object notification (add/change) for " << uuid.toHex();
+    QByteArray data;
+    QDataStream stream(&data, QIODevice::WriteOnly);
+    stream << cloud->cloudName();
+    stream << (quint32)cloud->itemUUIDs().count();
+
+    SCloudItem *item = cloud->item(uuid);
+
+    stream << uuid;
+    stream << item->mHash;
+    stream << item->mTimeStamp;
+    sendCommand(ObjectListCommand, data);
+}
+
+void SaesuCloudStorageSynchroniser::onDestroyed(const QByteArray &uuid)
+{
+    sDebug() << "Sending remote object destroy notification for " << uuid.toHex();
 }

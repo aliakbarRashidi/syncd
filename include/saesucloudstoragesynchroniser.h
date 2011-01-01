@@ -31,6 +31,9 @@ private slots:
     void syncCloud(const QString &cloudName);
     void sendCommand(quint8 token, const QByteArray &data);
 
+    void onAddedOrChanged(const QByteArray &uuid);
+    void onDestroyed(const QByteArray &uuid);
+
 private:
     QTcpSocket *mSocket;
     quint32 mBytesExpected;
