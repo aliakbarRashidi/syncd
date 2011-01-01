@@ -208,8 +208,9 @@ void SaesuCloudStorageSynchroniser::processObjectReply(QDataStream &stream)
                 // ours is alphabetically superior, ignore theirs
                 sDebug() << "For modified item " << uuid.toHex() << " using ours on hash";
             } else if (localItem->mHash == remoteItem.mHash) {
-                // what else can we realistically do?
                 sWarning() << "Identical hashes but differing timestamps detected for " << uuid.toHex() << ", data state now inconsistent!";
+                sWarning() << "My timestamp: " << localItem->mTimeStamp;
+                sWarning() << "Remote timestamp: " << remoteItem.mTimeStamp;
             } else if (localItem->mHash < remoteItem.mHash) {
                 // take theirs
                 sDebug() << "For modified item " << uuid.toHex() << " using theirs on hash";
