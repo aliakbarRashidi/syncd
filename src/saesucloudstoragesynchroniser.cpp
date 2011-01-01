@@ -16,7 +16,7 @@ SaesuCloudStorageSynchroniser::SaesuCloudStorageSynchroniser(QObject *parent, QT
     if (socket) {
         mSocket = socket;
         mSocket->setParent(this); // make sure we take over
-        //startSync(); // already connected, so send introduction
+        startSync(); // already connected, so send introduction
     } else {
         mSocket = new QTcpSocket(this);
     }
