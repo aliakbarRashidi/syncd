@@ -18,6 +18,11 @@ public slots:
     void connectToHost(const QHostAddress &address);
     void processData(const QByteArray &bytes);
 
+    // command processing
+    void processObjectList(QDataStream &stream);
+    void processObjectRequest(QDataStream &stream);
+    void processObjectReply(QDataStream &stream);
+
 private slots:
     void onReadyRead();
     void onError(QAbstractSocket::SocketError error);
@@ -25,9 +30,9 @@ private slots:
     void startSync();
     void syncCloud(const QString &cloudName);
     void sendCommand(quint8 token, const QByteArray &data);
+
 private:
     QTcpSocket *mSocket;
-    SCloudStorage *mCurrentCloud;
     quint32 mBytesExpected;
 
     enum CommandTokens

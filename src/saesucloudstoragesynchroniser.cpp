@@ -16,7 +16,7 @@ SaesuCloudStorageSynchroniser::SaesuCloudStorageSynchroniser(QObject *parent, QT
     if (socket) {
         mSocket = socket;
         mSocket->setParent(this); // make sure we take over
-        startSync(); // already connected, so send introduction
+        //startSync(); // already connected, so send introduction
     } else {
         mSocket = new QTcpSocket(this);
     }
@@ -68,12 +68,12 @@ void SaesuCloudStorageSynchroniser::syncCloud(const QString &cloudName)
 
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
-    mCurrentCloud = SCloudStorage::instance(cloudName);
-    stream << mCurrentCloud->cloudName();
-    stream << (quint32)mCurrentCloud->itemUUIDs().count();
+    SCloudStorage *cloud = SCloudStorage::instance(cloudName);
+    stream << cloud->cloudName();
+    stream << (quint32)cloud->itemUUIDs().count();
 
-    foreach (const QByteArray &uuid, mCurrentCloud->itemUUIDs()) {
-        SCloudItem *item = mCurrentCloud->item(uuid);
+    foreach (const QByteArray &uuid, cloud->itemUUIDs()) {
+        SCloudItem *item = cloud->item(uuid);
 
         stream << uuid;
         stream << item->mHash;
@@ -103,6 +103,114 @@ void SaesuCloudStorageSynchroniser::onReadyRead()
     }
 }
 
+void SaesuCloudStorageSynchroniser::processObjectList(QDataStream &stream)
+{
+    QString cloudName;
+    stream >> cloudName;
+    SCloudStorage *cloud = SCloudStorage::instance(cloudName);
+
+    // sending a message, find message
+    sDebug() << "Processing an object list";
+
+    quint32 itemCount;
+    stream >> itemCount;
+
+    sDebug() << itemCount << " items";
+
+    for (quint32 i = 0; i < itemCount; ++i) {
+        QByteArray uuid;
+        QByteArray itemHash;
+        quint64 itemTS;
+
+        stream >> uuid;
+        stream >> itemHash;
+        stream >> itemTS;
+
+        bool requestItem = false;
+        if (!cloud->hasItem(uuid)) {
+            sDebug() << "Item " << uuid.toHex() << " not found; requesting";
+            requestItem = true;
+        } else {
+            SCloudItem *item = cloud->item(uuid);
+            if (item->mHash != itemHash ||
+                item->mTimeStamp != itemTS) {
+                sDebug() << "Modified item " << uuid.toHex() << " detected, requesting";
+                requestItem = true;
+            }
+        }
+
+        if (requestItem) {
+            QByteArray sendingData;
+            QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
+
+            sendingStream << cloud->cloudName();
+            sendingStream << uuid;
+            sendCommand(ObjectRequestCommand, sendingData);
+        }
+    }
+}
+
+void SaesuCloudStorageSynchroniser::processObjectRequest(QDataStream &stream)
+{
+    QString cloudName;
+    stream >> cloudName;
+    SCloudStorage *cloud = SCloudStorage::instance(cloudName);
+
+    QByteArray uuid;
+    stream >> uuid;
+    sDebug() << "Object request for " << uuid.toHex() << " recieved; sending";
+
+    QByteArray sendingData;
+    QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
+
+    sendingStream << cloudName;
+    sendingStream << uuid;
+    sendingStream << *(cloud->item(uuid));
+    sendCommand(ObjectReplyCommand, sendingData);
+}
+
+void SaesuCloudStorageSynchroniser::processObjectReply(QDataStream &stream)
+{
+    QString cloudName;
+    stream >> cloudName;
+    SCloudStorage *cloud = SCloudStorage::instance(cloudName);
+
+    QByteArray uuid;
+    SCloudItem remoteItem;
+    stream >> uuid;
+    stream >> remoteItem;
+
+    if (!cloud->hasItem(uuid)) {
+        cloud->insertItem(uuid, &remoteItem);
+    } else {
+        SCloudItem *localItem = cloud->item(uuid);
+
+        // find out which is the newer item
+        if (localItem->mTimeStamp > remoteItem.mTimeStamp) {
+            // ours is newer, ignore theirs
+            sDebug() << "For modified item " << uuid.toHex() << ", using ours on TS";
+        } else if (localItem->mTimeStamp == remoteItem.mTimeStamp) {
+
+            // identical, resort to alphabetically superior SHA to force a compromise
+            if (localItem->mHash > remoteItem.mHash) {
+                // ours is alphabetically superior, ignore theirs
+                sDebug() << "For modified item " << uuid.toHex() << " using ours on hash";
+            } else if (localItem->mHash == remoteItem.mHash) {
+                // what else can we realistically do?
+                sWarning() << "Identical hashes but differing timestamps detected for " << uuid.toHex() << ", data state now inconsistent!";
+            } else if (localItem->mHash < remoteItem.mHash) {
+                // take theirs
+                sDebug() << "For modified item " << uuid.toHex() << " using theirs on hash";
+                cloud->insertItem(uuid, &remoteItem);
+            }
+        } else if (localItem->mTimeStamp < remoteItem.mTimeStamp) {
+            // theirs wins
+            sDebug() << "For modified item " << uuid.toHex() << " using theirs on TS";
+            cloud->insertItem(uuid, &remoteItem);
+        }
+    }
+}
+
 void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
 {
     QDataStream stream(bytes);
@@ -111,110 +219,14 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
     stream >> command;
 
     switch (command) {
-        case ObjectListCommand: {
-            QString cloudName;
-            stream >> cloudName;
-            mCurrentCloud = SCloudStorage::instance(cloudName);
-
-            // sending a message, find message
-            sDebug() << "Processing an object list";
-
-            quint32 itemCount;
-            stream >> itemCount;
-
-            sDebug() << itemCount << " items";
-
-            for (quint32 i = 0; i < itemCount; ++i) {
-                QByteArray uuid;
-                QByteArray itemHash;
-                quint64 itemTS;
-
-                stream >> uuid;
-                stream >> itemHash;
-                stream >> itemTS;
-
-                bool requestItem = false;
-                if (!mCurrentCloud->hasItem(uuid)) {
-                    sDebug() << "Item " << uuid.toHex() << " not found; requesting";
-                    requestItem = true;
-                } else {
-                    SCloudItem *item = mCurrentCloud->item(uuid);
-                    if (item->mHash != itemHash ||
-                        item->mTimeStamp != itemTS) {
-                        sDebug() << "Modified item " << uuid.toHex() << " detected, requesting";
-                        requestItem = true;
-                    }
-                }
-
-                if (requestItem) {
-                    QByteArray sendingData;
-                    QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
-
-                    sendingStream << mCurrentCloud->cloudName();
-                    sendingStream << uuid;
-                    sendCommand(ObjectRequestCommand, sendingData);
-                }
-            }
-            }
+        case ObjectListCommand:
+            processObjectList(stream);
             break;
-        case ObjectRequestCommand: {
-            QString cloudName;
-            stream >> cloudName;
-            mCurrentCloud = SCloudStorage::instance(cloudName);
-
-            QByteArray uuid;
-            stream >> uuid;
-            sDebug() << "Object request for " << uuid.toHex() << " recieved; sending";
-
-            QByteArray sendingData;
-            QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
-
-            sendingStream << cloudName;
-            sendingStream << uuid;
-            sendingStream << *(mCurrentCloud->item(uuid));
-            sendCommand(ObjectReplyCommand, sendingData);
-            }
+        case ObjectRequestCommand:
+            processObjectRequest(stream);
             break;
-        case ObjectReplyCommand: {
-            QString cloudName;
-            stream >> cloudName;
-            mCurrentCloud = SCloudStorage::instance(cloudName);
-
-            QByteArray uuid;
-            SCloudItem remoteItem;
-            stream >> uuid;
-            stream >> remoteItem;
-
-            if (!mCurrentCloud->hasItem(uuid)) {
-                mCurrentCloud->insertItem(uuid, &remoteItem);
-            } else {
-                SCloudItem *localItem = mCurrentCloud->item(uuid);
-
-                // find out which is the newer item
-                if (localItem->mTimeStamp > remoteItem.mTimeStamp) {
-                    // ours is newer, ignore theirs
-                    sDebug() << "For modified item " << uuid.toHex() << ", using ours on TS";
-                } else if (localItem->mTimeStamp == remoteItem.mTimeStamp) {
-
-                    // identical, resort to alphabetically superior SHA to force a compromise
-                    if (localItem->mHash > remoteItem.mHash) {
-                        // ours is alphabetically superior, ignore theirs
-                        sDebug() << "For modified item " << uuid.toHex() << " using ours on hash";
-                    } else if (localItem->mHash == remoteItem.mHash) {
-                        // what else can we realistically do?
-                        sWarning() << "Identical hashes but differing timestamps detected for " << uuid.toHex() << ", data state now inconsistent!";
-                    } else if (localItem->mHash < remoteItem.mHash) {
-                        // take theirs
-                        sDebug() << "For modified item " << uuid.toHex() << " using theirs on hash";
-                        mCurrentCloud->insertItem(uuid, &remoteItem);
-                    }
-                } else if (localItem->mTimeStamp < remoteItem.mTimeStamp) {
-                    // theirs wins
-                    sDebug() << "For modified item " << uuid.toHex() << " using theirs on TS";
-                    mCurrentCloud->insertItem(uuid, &remoteItem);
-                }
-            }
-            }
+        case ObjectReplyCommand:
+            processObjectReply(stream);
             break;
         default:
             break;
