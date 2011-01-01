@@ -19,11 +19,11 @@ public slots:
     void processData(const QByteArray &bytes);
 
 private slots:
-    void onConnected();
     void onReadyRead();
     void onError(QAbstractSocket::SocketError error);
     void onDisconnected();
-    void changeState();
+    void startSync();
+    void syncCloud(const QString &cloudName);
     void sendCommand(quint8 token, const QByteArray &data);
 private:
     QTcpSocket *mSocket;
@@ -50,15 +50,6 @@ private:
         // SCloudItem <item>, see libsaesu for exact formatting
         ObjectReplyCommand = 0x2
     };
-
-    enum State
-    {
-        Unknown,
-        DeleteList,
-        ObjectList
-    };
-
-    State mState;
 };
 
 #endif // SAESUCLOUDSTORAGESYNCHRONISER_H

@@ -1,6 +1,7 @@
 // Qt
 #include <QTcpSocket>
 #include <QHostAddress>
+#include <QDir>
 
 // Saesu
 #include <scloudstorage.h>
@@ -11,30 +12,19 @@
 SaesuCloudStorageSynchroniser::SaesuCloudStorageSynchroniser(QObject *parent, QTcpSocket *socket)
     : QObject(parent)
     , mBytesExpected(0)
-    , mState(Unknown)
 {
     if (socket) {
         mSocket = socket;
         mSocket->setParent(this); // make sure we take over
-        changeState(); // already connected, so send introduction
+        startSync(); // already connected, so send introduction
     } else {
         mSocket = new QTcpSocket(this);
     }
 
-    connect(mSocket, SIGNAL(connected()), SLOT(onConnected()));
+    connect(mSocket, SIGNAL(connected()), SLOT(startSync()));
     connect(mSocket, SIGNAL(readyRead()), SLOT(onReadyRead()));
     connect(mSocket, SIGNAL(error(QAbstractSocket::SocketError)), SLOT(onError(QAbstractSocket::SocketError)));
     connect(mSocket, SIGNAL(disconnected()), SLOT(onDisconnected()));
-}
-
-
-void SaesuCloudStorageSynchroniser::onConnected()
-{
-    sDebug() << "Connected!";
-    changeState();
-//    quint32 length = 5;
-//    mSocket->write(reinterpret_cast<char *>(&length), sizeof(quint32));
-//    mSocket->write("hello");
 }
 
 void SaesuCloudStorageSynchroniser::sendCommand(quint8 token, const QByteArray &data)
@@ -46,39 +36,51 @@ void SaesuCloudStorageSynchroniser::sendCommand(quint8 token, const QByteArray &
     mSocket->write(data);
 }
 
-void SaesuCloudStorageSynchroniser::changeState()
+void SaesuCloudStorageSynchroniser::startSync()
 {
-    switch (mState) {
-    case Unknown:
-        mState = DeleteList;
-        sDebug() << "Sending delete list";
-        changeState();
-        break;
-    case DeleteList: {
-        mState = ObjectList;
-        sDebug() << "Sending object list";
+     // TODO: dynamic picking
+    QDir cloudsDir(SCloudStorage::cloudPath(QLatin1String("")));
+    QStringList clouds = cloudsDir.entryList();
 
-        QByteArray data;
-        QDataStream stream(&data, QIODevice::WriteOnly);
-        mCurrentCloud = SCloudStorage::instance("test"); // TODO: dynamic picking
-        stream << QString("test"); // TODO: make this be picked dynamically
-        stream << (quint32)mCurrentCloud->itemUUIDs().count();
+    foreach (const QString &cloudName, clouds) {
+        QFileInfo fi(cloudsDir.absoluteFilePath(cloudName));
 
-        foreach (const QByteArray &uuid, mCurrentCloud->itemUUIDs()) {
-            SCloudItem *item = mCurrentCloud->item(uuid);
-
-            stream << uuid;
-            stream << item->mHash;
-            stream << item->mTimeStamp;
+        if (fi.isFile()) {
+            sDebug() << "Skipping file " << cloudName;
+            continue;
         }
 
-        sendCommand(ObjectListCommand, data);
+        if (cloudName[0] == '.') {
+            sDebug() << "Skipping dotfile " << cloudName;
+            continue;
         }
-        break;
-    case ObjectList:
-        mSocket->disconnectFromHost();
-        break;
+
+        sDebug() << "Synchronising " << cloudName;
+        syncCloud(cloudName);
     }
+}
+
+void SaesuCloudStorageSynchroniser::syncCloud(const QString &cloudName)
+{
+    sDebug() << "Sending delete list";
+
+    sDebug() << "Sending object list";
+
+    QByteArray data;
+    QDataStream stream(&data, QIODevice::WriteOnly);
+    mCurrentCloud = SCloudStorage::instance(cloudName);
+    stream << mCurrentCloud->cloudName();
+    stream << (quint32)mCurrentCloud->itemUUIDs().count();
+
+    foreach (const QByteArray &uuid, mCurrentCloud->itemUUIDs()) {
+        SCloudItem *item = mCurrentCloud->item(uuid);
+
+        stream << uuid;
+        stream << item->mHash;
+        stream << item->mTimeStamp;
+    }
+
+    sendCommand(ObjectListCommand, data);
 }
 
 void SaesuCloudStorageSynchroniser::onReadyRead()
