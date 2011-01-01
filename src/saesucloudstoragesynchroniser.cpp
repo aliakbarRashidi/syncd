@@ -65,7 +65,7 @@ void SaesuCloudStorageSynchroniser::syncCloud(const QString &cloudName)
     SCloudStorage *cloud = SCloudStorage::instance(cloudName);
 
     // connect signals for future updates
-    connect(cloud, SIGNAL(changed(QByteArray,QString)), SLOT(onAddedOrChanged(QByteArray)));
+    connect(cloud, SIGNAL(changed(QByteArray)), SLOT(onAddedOrChanged(QByteArray)));
     connect(cloud, SIGNAL(created(QByteArray)), SLOT(onAddedOrChanged(QByteArray)));
     connect(cloud, SIGNAL(destroyed(QByteArray)), SLOT(onDestroyed(QByteArray)));
 
