@@ -164,6 +164,12 @@ void SaesuCloudStorageSynchroniser::processObjectRequest(QDataStream &stream)
 
     QByteArray uuid;
     stream >> uuid;
+
+    if (!cloud->hasItem(uuid)) {
+        sDebug() << "Recieved a request for a nonexistant item! UUID: " << uuid.toHex();
+        return;
+    }
+
     sDebug() << "Object request for " << uuid.toHex() << " recieved; sending";
 
     QByteArray sendingData;
@@ -270,7 +276,7 @@ void SaesuCloudStorageSynchroniser::onAddedOrChanged(const QByteArray &uuid)
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
     stream << cloud->cloudName();
-    stream << (quint32)cloud->itemUUIDs().count();
+    stream << (quint32)1; // only the one item :)
 
     SCloudItem *item = cloud->item(uuid);
 
