@@ -6,10 +6,10 @@
 #include "sglobal.h"
 
 // Us
-#include "saesucloudstorageadvertiser.h"
+#include "syncadvertiser.h"
 #include "saesucloudstoragesynchroniser.h"
 
-SaesuCloudStorageAdvertiser::SaesuCloudStorageAdvertiser(QObject *parent)
+SyncAdvertiser::SyncAdvertiser(QObject *parent)
     : QObject(parent)
 {
     if (!mBroadcaster.bind(QHostAddress::Broadcast, 1337)) {
@@ -30,7 +30,7 @@ SaesuCloudStorageAdvertiser::SaesuCloudStorageAdvertiser(QObject *parent)
     connect(&mServer, SIGNAL(newConnection()), SLOT(onNewConnection()));
 }
 
-void SaesuCloudStorageAdvertiser::onReadyRead()
+void SyncAdvertiser::onReadyRead()
 {
     QHostAddress senderAddress;
     quint16      senderPort;
@@ -56,7 +56,7 @@ void SaesuCloudStorageAdvertiser::onReadyRead()
     }
 }
 
-void SaesuCloudStorageAdvertiser::onNewConnection()
+void SyncAdvertiser::onNewConnection()
 {
     sDebug() << "Got a new connection!";
     while (mServer.hasPendingConnections()) {

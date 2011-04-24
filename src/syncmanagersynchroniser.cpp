@@ -7,9 +7,9 @@
 #include <scloudstorage.h>
 
 // Us
-#include "saesucloudstoragesynchroniser.h"
+#include "syncmanagersynchroniser.h"
 
-SaesuCloudStorageSynchroniser::SaesuCloudStorageSynchroniser(QObject *parent, QTcpSocket *socket)
+SyncManagerSynchroniser::SyncManagerSynchroniser(QObject *parent, QTcpSocket *socket)
     : QObject(parent)
     , mBytesExpected(0)
 {
@@ -27,7 +27,7 @@ SaesuCloudStorageSynchroniser::SaesuCloudStorageSynchroniser(QObject *parent, QT
     connect(mSocket, SIGNAL(disconnected()), SLOT(onDisconnected()));
 }
 
-void SaesuCloudStorageSynchroniser::sendCommand(quint8 token, const QByteArray &data)
+void SyncManagerSynchroniser::sendCommand(quint8 token, const QByteArray &data)
 {
     // TODO: endianness?
     quint32 length = (quint32)data.length() + 1;
@@ -36,7 +36,7 @@ void SaesuCloudStorageSynchroniser::sendCommand(quint8 token, const QByteArray &
     mSocket->write(data);
 }
 
-void SaesuCloudStorageSynchroniser::startSync()
+void SyncManagerSynchroniser::startSync()
 {
      // TODO: dynamic picking
     QDir cloudsDir(SCloudStorage::cloudPath(QLatin1String("")));
@@ -60,7 +60,7 @@ void SaesuCloudStorageSynchroniser::startSync()
     }
 }
 
-void SaesuCloudStorageSynchroniser::syncCloud(const QString &cloudName)
+void SyncManagerSynchroniser::syncCloud(const QString &cloudName)
 {
     SCloudStorage *cloud = SCloudStorage::instance(cloudName);
 
@@ -89,7 +89,7 @@ void SaesuCloudStorageSynchroniser::syncCloud(const QString &cloudName)
     sendCommand(ObjectListCommand, data);
 }
 
-void SaesuCloudStorageSynchroniser::onReadyRead()
+void SyncManagerSynchroniser::onReadyRead()
 {
     while (mSocket->bytesAvailable() >= sizeof(quint32)) {
         if (mBytesExpected == 0) {
@@ -109,7 +109,7 @@ void SaesuCloudStorageSynchroniser::onReadyRead()
     }
 }
 
-void SaesuCloudStorageSynchroniser::processObjectList(QDataStream &stream)
+void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
 {
     QString cloudName;
     stream >> cloudName;
@@ -156,7 +156,7 @@ void SaesuCloudStorageSynchroniser::processObjectList(QDataStream &stream)
     }
 }
 
-void SaesuCloudStorageSynchroniser::processObjectRequest(QDataStream &stream)
+void SyncManagerSynchroniser::processObjectRequest(QDataStream &stream)
 {
     QString cloudName;
     stream >> cloudName;
@@ -181,7 +181,7 @@ void SaesuCloudStorageSynchroniser::processObjectRequest(QDataStream &stream)
     sendCommand(ObjectReplyCommand, sendingData);
 }
 
-void SaesuCloudStorageSynchroniser::processObjectReply(QDataStream &stream)
+void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
 {
     QString cloudName;
     stream >> cloudName;
@@ -236,7 +236,7 @@ void SaesuCloudStorageSynchroniser::processObjectReply(QDataStream &stream)
     }
 }
 
-void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
+void SyncManagerSynchroniser::processData(const QByteArray &bytes)
 {
     QDataStream stream(bytes);
 
@@ -258,25 +258,25 @@ void SaesuCloudStorageSynchroniser::processData(const QByteArray &bytes)
     }
 }
 
-void SaesuCloudStorageSynchroniser::connectToHost(const QHostAddress &address)
+void SyncManagerSynchroniser::connectToHost(const QHostAddress &address)
 {
     sDebug() << "Connecting to " << address;
     mSocket->connectToHost(address, 1337);
 }
 
-void SaesuCloudStorageSynchroniser::onError(QAbstractSocket::SocketError error)
+void SyncManagerSynchroniser::onError(QAbstractSocket::SocketError error)
 {
     sDebug() << "Had an error: " << error;
     deleteLater();
 }
 
-void SaesuCloudStorageSynchroniser::onDisconnected()
+void SyncManagerSynchroniser::onDisconnected()
 {
     sDebug() << "Connection closed";
     deleteLater();
 }
 
-void SaesuCloudStorageSynchroniser::onAddedOrChanged(const QByteArray &uuid)
+void SyncManagerSynchroniser::onAddedOrChanged(const QByteArray &uuid)
 {
     SCloudStorage *cloud = qobject_cast<SCloudStorage *>(sender());
     if (S_VERIFY(cloud, "no cloud as sender? huh?"))
@@ -299,7 +299,7 @@ void SaesuCloudStorageSynchroniser::onAddedOrChanged(const QByteArray &uuid)
     sendCommand(ObjectListCommand, data);
 }
 
-void SaesuCloudStorageSynchroniser::onDestroyed(const QByteArray &uuid)
+void SyncManagerSynchroniser::onDestroyed(const QByteArray &uuid)
 {
     sDebug() << "Sending remote object destroy notification for " << uuid.toHex();
 }

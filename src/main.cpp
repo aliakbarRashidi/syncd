@@ -1,5 +1,5 @@
 #include <QCoreApplication>
-#include "saesucloudstorageadvertiser.h"
+#include "syncadvertiser.h"
 
 int main(int argc, char **argv)
 {
@@ -8,6 +8,6 @@ int main(int argc, char **argv)
     a.setOrganizationName(QLatin1String("saesu"));
     a.setApplicationName(QLatin1String("syncd"));
 
-    SaesuCloudStorageAdvertiser storageAdvertiser;
+    SyncAdvertiser storageAdvertiser;
     a.exec();
 }

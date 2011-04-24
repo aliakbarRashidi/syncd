@@ -1,5 +1,5 @@
-#ifndef SAESUCLOUDSTORAGESYNCHRONISER_H
-#define SAESUCLOUDSTORAGESYNCHRONISER_H
+#ifndef SYNCMANAGERSYNCHRONISER_H
+#define SYNCMANAGERSYNCHRONISER_H
 
 // Qt
 #include <QObject>
@@ -8,11 +8,11 @@
 // Saesu
 class SCloudStorage;
 
-class SaesuCloudStorageSynchroniser : public QObject
+class SyncManagerSynchroniser : public QObject
 {
     Q_OBJECT
 public:
-    explicit SaesuCloudStorageSynchroniser(QObject *parent, QTcpSocket *socket = 0);
+    explicit SyncManagerSynchroniser(QObject *parent, QTcpSocket *socket = 0);
 
 public slots:
     void connectToHost(const QHostAddress &address);
@@ -60,4 +60,4 @@ private:
     };
 };
 
-#endif // SAESUCLOUDSTORAGESYNCHRONISER_H
+#endif // SYNCMANAGERSYNCHRONISER_H
