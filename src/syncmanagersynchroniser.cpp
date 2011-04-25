@@ -42,6 +42,7 @@ void SyncManagerSynchroniser::sendCommand(quint8 token, const QByteArray &data)
 void SyncManagerSynchroniser::startSync()
 {
      // TODO: dynamic picking
+    connect(SyncManager::instance(), SIGNAL(resyncRequired()), SLOT(startSync()));
     syncCloud("saesu");
 }
 

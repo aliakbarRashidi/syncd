@@ -40,6 +40,9 @@ public:
 
     SObjectManager *manager();
 
+signals:
+    void resyncRequired();
+
 private slots:
     void readObjects();
     void onObjectsRead();

@@ -73,6 +73,8 @@ void SyncManager::onObjectsRead()
     foreach (const SObject &object, objects) {
         mObjects.insert(object.id().localId(), object);
     }
+
+    emit resyncRequired();
 }
 
 QHash<SObjectLocalId, SObject> SyncManager::objects() const
