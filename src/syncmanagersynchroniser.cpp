@@ -188,6 +188,10 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
         saveItem = true;
     } else {
         const SObject &localItem = *cit;
+        
+        sDebug() << "Existing object " << uuid;
+        sDebug() << "   LOCAL TS: " << localItem.lastSaved();
+        sDebug() << "   REMOTE TS: " << remoteItem.lastSaved();
 
         // find out which is the newer item
         if (localItem.lastSaved() > remoteItem.lastSaved()) {
@@ -195,6 +199,9 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
             sDebug() << "For modified item " << uuid << ", using ours on TS";
         } else if (localItem.lastSaved() == remoteItem.lastSaved()) {
             // identical, resort to alphabetically superior SHA to force a compromise
+            sDebug() << "TS equal; hash comparison needed";
+            sDebug() << "  LOCAL HASH: " << localItem.hash();
+            sDebug() << "  REMOTE HASH: " << remoteItem.hash();
             if (localItem.hash() > remoteItem.hash()) {
                 // ours is alphabetically superior, ignore theirs
                 sDebug() << "For modified item " << uuid << " using ours on hash";
