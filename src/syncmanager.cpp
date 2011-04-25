@@ -50,6 +50,11 @@ SyncManager *SyncManager::instance()
     return manager;
 }
 
+SObjectManager *SyncManager::manager()
+{
+    return &mManager;
+}
+
 void SyncManager::readObjects()
 {
     SObjectFetchRequest *fetchRequest = new SObjectFetchRequest;

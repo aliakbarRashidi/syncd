@@ -38,6 +38,8 @@ public:
 
     QHash<SObjectLocalId, SObject> objects() const;
 
+    SObjectManager *manager();
+
 private slots:
     void readObjects();
     void onObjectsRead();

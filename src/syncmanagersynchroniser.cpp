@@ -6,6 +6,7 @@
 // Saesu
 #include <sobject.h>
 #include <sglobal.h> // XXX: move to sobject.h
+#include <sobjectsaverequest.h>
 
 // Us
 #include "syncmanager.h"
@@ -179,10 +180,11 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
     
     QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
     QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
+    bool saveItem = false;
 
     if (cit == objects.end()) {
         sDebug() << "Inserting an item I don't have";
-        // TODO: do the save request
+        saveItem = true;
     } else {
         const SObject &localItem = *cit;
 
@@ -214,13 +216,21 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
             } else if (localItem.hash() < remoteItem.hash()) {
                 // take theirs
                 sDebug() << "For modified item " << uuid << " using theirs on hash";
-                // TODO: save item
+                saveItem = true;
             }
         } else if (localItem.lastSaved() < remoteItem.lastSaved()) {
             // theirs wins
             sDebug() << "For modified item " << uuid << " using theirs on TS";
-            // TODO: save item
+            saveItem = true;
         }
+    }
+
+    if (saveItem) {
+        // TODO: batch saving
+        SObjectSaveRequest *saveRequest = new SObjectSaveRequest;
+        connect(saveRequest, SIGNAL(finished()), saveRequest, SLOT(deleteLater()));
+        saveRequest->add(remoteItem);
+        saveRequest->start(SyncManager::instance()->manager());
     }
 }
 
