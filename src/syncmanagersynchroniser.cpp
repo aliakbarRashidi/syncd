@@ -230,6 +230,7 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
         SObjectSaveRequest *saveRequest = new SObjectSaveRequest;
         connect(saveRequest, SIGNAL(finished()), saveRequest, SLOT(deleteLater()));
         saveRequest->add(remoteItem);
+        saveRequest->setSaveHint(SObjectSaveRequest::ObjectFromSync);
         saveRequest->start(SyncManager::instance()->manager());
     }
 }
