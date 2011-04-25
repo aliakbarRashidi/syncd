@@ -4,9 +4,11 @@
 #include <QDir>
 
 // Saesu
-#include <scloudstorage.h>
+#include <sobject.h>
+#include <sglobal.h> // XXX: move to sobject.h
 
 // Us
+#include "syncmanager.h"
 #include "syncmanagersynchroniser.h"
 
 SyncManagerSynchroniser::SyncManagerSynchroniser(QObject *parent, QTcpSocket *socket)
@@ -39,51 +41,27 @@ void SyncManagerSynchroniser::sendCommand(quint8 token, const QByteArray &data)
 void SyncManagerSynchroniser::startSync()
 {
      // TODO: dynamic picking
-    QDir cloudsDir(SCloudStorage::cloudPath(QLatin1String("")));
-    QStringList clouds = cloudsDir.entryList();
-
-    foreach (const QString &cloudName, clouds) {
-        QFileInfo fi(cloudsDir.absoluteFilePath(cloudName));
-
-        if (fi.isFile()) {
-            sDebug() << "Skipping file " << cloudName;
-            continue;
-        }
-
-        if (cloudName[0] == '.') {
-            sDebug() << "Skipping dotfile " << cloudName;
-            continue;
-        }
-
-        sDebug() << "Synchronising " << cloudName;
-        syncCloud(cloudName);
-    }
+    syncCloud("saesu");
 }
 
 void SyncManagerSynchroniser::syncCloud(const QString &cloudName)
 {
-    SCloudStorage *cloud = SCloudStorage::instance(cloudName);
-
-    // connect signals for future updates
-    connect(cloud, SIGNAL(changed(QByteArray)), SLOT(onAddedOrChanged(QByteArray)));
-    connect(cloud, SIGNAL(created(QByteArray)), SLOT(onAddedOrChanged(QByteArray)));
-    connect(cloud, SIGNAL(destroyed(QByteArray)), SLOT(onDestroyed(QByteArray)));
-
     sDebug() << "Sending delete list";
 
     sDebug() << "Sending object list";
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
 
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
-    stream << cloud->cloudName();
-    stream << (quint32)cloud->itemUUIDs().count();
+    stream << cloudName;
+    stream << (quint32)objects.count();
 
-    foreach (const QByteArray &uuid, cloud->itemUUIDs()) {
-        SCloudItem *item = cloud->item(uuid);
+    foreach (const SObjectLocalId &localId, objects.keys()) {
+        SObject &obj = objects[localId];
 
-        stream << uuid;
-        stream << item->mHash;
-        stream << item->mTimeStamp;
+        stream << localId;
+        stream << obj.hash();
+        stream << obj.lastSaved();
     }
 
     sendCommand(ObjectListCommand, data);
@@ -113,10 +91,10 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
 {
     QString cloudName;
     stream >> cloudName;
-    SCloudStorage *cloud = SCloudStorage::instance(cloudName);
 
     // sending a message, find message
     sDebug() << "Processing an object list";
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
 
     quint32 itemCount;
     stream >> itemCount;
@@ -124,7 +102,7 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
     sDebug() << itemCount << " items";
 
     for (quint32 i = 0; i < itemCount; ++i) {
-        QByteArray uuid;
+        SObjectLocalId uuid;
         QByteArray itemHash;
         quint64 itemTS;
 
@@ -133,14 +111,17 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
         stream >> itemTS;
 
         bool requestItem = false;
-        if (!cloud->hasItem(uuid)) {
-            sDebug() << "Item " << uuid.toHex() << " not found; requesting";
+
+        QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
+        if (cit == objects.end()) {
+            sDebug() << "Item " << uuid << " not found; requesting";
             requestItem = true;
         } else {
-            SCloudItem *item = cloud->item(uuid);
-            if (item->mHash != itemHash ||
-                item->mTimeStamp != itemTS) {
-                sDebug() << "Modified item " << uuid.toHex() << " detected, requesting";
+            const SObject &obj = *cit;
+
+            if (obj.hash() != itemHash ||
+                obj.lastSaved() != itemTS) {
+                sDebug() << "Modified item " << uuid << " detected, requesting";
                 requestItem = true;
             }
         }
@@ -149,7 +130,7 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
             QByteArray sendingData;
             QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
 
-            sendingStream << cloud->cloudName();
+            sendingStream << cloudName;
             sendingStream << uuid;
             sendCommand(ObjectRequestCommand, sendingData);
         }
@@ -160,24 +141,29 @@ void SyncManagerSynchroniser::processObjectRequest(QDataStream &stream)
 {
     QString cloudName;
     stream >> cloudName;
-    SCloudStorage *cloud = SCloudStorage::instance(cloudName);
 
-    QByteArray uuid;
+    SObjectLocalId uuid;
     stream >> uuid;
 
-    if (!cloud->hasItem(uuid)) {
-        sDebug() << "Recieved a request for a nonexistant item! UUID: " << uuid.toHex();
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
+    QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
+    if (cit == objects.end()) {
+        sDebug() << "Recieved a request for a nonexistant item! UUID: " << uuid;
         return;
     }
 
-    sDebug() << "Object request for " << uuid.toHex() << " recieved; sending";
+    sDebug() << "Object request for " << uuid << " recieved; sending";
 
     QByteArray sendingData;
     QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
 
     sendingStream << cloudName;
     sendingStream << uuid;
-    sendingStream << *(cloud->item(uuid));
+    
+    // TODO: this won't correctly serialise hash/modified timestamp; we need to
+    // change how we save SObject instances in the db (stop using stream operators)
+    // and then change the stream operators to persist the _WHOLE_ object
+    sendingStream << *(cit);
     sendCommand(ObjectReplyCommand, sendingData);
 }
 
@@ -185,29 +171,31 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
 {
     QString cloudName;
     stream >> cloudName;
-    SCloudStorage *cloud = SCloudStorage::instance(cloudName);
 
-    QByteArray uuid;
-    SCloudItem remoteItem;
+    SObjectLocalId uuid;
+    SObject remoteItem;
     stream >> uuid;
     stream >> remoteItem;
+    
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
+    QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
 
-    if (!cloud->hasItem(uuid)) {
-        cloud->insertItem(uuid, &remoteItem);
+    if (cit == objects.end()) {
+        sDebug() << "Inserting an item I don't have";
+        // TODO: do the save request
     } else {
-        SCloudItem *localItem = cloud->item(uuid);
+        const SObject &localItem = *cit;
 
         // find out which is the newer item
-        if (localItem->mTimeStamp > remoteItem.mTimeStamp) {
+        if (localItem.lastSaved() > remoteItem.lastSaved()) {
             // ours is newer, ignore theirs
-            sDebug() << "For modified item " << uuid.toHex() << ", using ours on TS";
-        } else if (localItem->mTimeStamp == remoteItem.mTimeStamp) {
-
+            sDebug() << "For modified item " << uuid << ", using ours on TS";
+        } else if (localItem.lastSaved() == remoteItem.lastSaved()) {
             // identical, resort to alphabetically superior SHA to force a compromise
-            if (localItem->mHash > remoteItem.mHash) {
+            if (localItem.hash() > remoteItem.hash()) {
                 // ours is alphabetically superior, ignore theirs
-                sDebug() << "For modified item " << uuid.toHex() << " using ours on hash";
-            } else if (localItem->mHash == remoteItem.mHash) {
+                sDebug() << "For modified item " << uuid << " using ours on hash";
+            } else if (localItem.hash() == remoteItem.hash()) {
                 // in the case of two connected clients, A and B,
                 // A may add an item, send a change notification (via object list) to B
                 // B will request the item, add it, which will trigger a
@@ -223,15 +211,15 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
                 //
                 // TODO: we could be neurotic, and check data A == data B
                 // (and if not, use the alphabetically superior like other parts of collision resolution)
-            } else if (localItem->mHash < remoteItem.mHash) {
+            } else if (localItem.hash() < remoteItem.hash()) {
                 // take theirs
-                sDebug() << "For modified item " << uuid.toHex() << " using theirs on hash";
-                cloud->insertItem(uuid, &remoteItem);
+                sDebug() << "For modified item " << uuid << " using theirs on hash";
+                // TODO: save item
             }
-        } else if (localItem->mTimeStamp < remoteItem.mTimeStamp) {
+        } else if (localItem.lastSaved() < remoteItem.lastSaved()) {
             // theirs wins
-            sDebug() << "For modified item " << uuid.toHex() << " using theirs on TS";
-            cloud->insertItem(uuid, &remoteItem);
+            sDebug() << "For modified item " << uuid << " using theirs on TS";
+            // TODO: save item
         }
     }
 }
@@ -276,30 +264,3 @@ void SyncManagerSynchroniser::onDisconnected()
     deleteLater();
 }
 
-void SyncManagerSynchroniser::onAddedOrChanged(const QByteArray &uuid)
-{
-    SCloudStorage *cloud = qobject_cast<SCloudStorage *>(sender());
-    if (S_VERIFY(cloud, "no cloud as sender? huh?"))
-        return;
-
-    // send an object list with just this item in it
-    // the other side will then send an object request to get the changes
-    // this isn't necessarily the 'best' way to do this, but it works
-    sDebug() << "Sending remote object notification (add/change) for " << uuid.toHex();
-    QByteArray data;
-    QDataStream stream(&data, QIODevice::WriteOnly);
-    stream << cloud->cloudName();
-    stream << (quint32)1; // only the one item :)
-
-    SCloudItem *item = cloud->item(uuid);
-
-    stream << uuid;
-    stream << item->mHash;
-    stream << item->mTimeStamp;
-    sendCommand(ObjectListCommand, data);
-}
-
-void SyncManagerSynchroniser::onDestroyed(const QByteArray &uuid)
-{
-    sDebug() << "Sending remote object destroy notification for " << uuid.toHex();
-}

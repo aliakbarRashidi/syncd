@@ -7,7 +7,7 @@
 
 // Us
 #include "syncadvertiser.h"
-#include "saesucloudstoragesynchroniser.h"
+#include "syncmanagersynchroniser.h"
 
 SyncAdvertiser::SyncAdvertiser(QObject *parent)
     : QObject(parent)
@@ -51,7 +51,7 @@ void SyncAdvertiser::onReadyRead()
     if (returnedSize == 5 && datagram == "HELLO") {
         // Great joy
         qDebug() << senderAddress << " said " << datagram << ", connecting back...";
-        SaesuCloudStorageSynchroniser *syncSocket = new SaesuCloudStorageSynchroniser(this);
+        SyncManagerSynchroniser *syncSocket = new SyncManagerSynchroniser(this);
         syncSocket->connectToHost(senderAddress);
     }
 }
@@ -61,6 +61,6 @@ void SyncAdvertiser::onNewConnection()
     sDebug() << "Got a new connection!";
     while (mServer.hasPendingConnections()) {
         QTcpSocket *socket = mServer.nextPendingConnection();
-        SaesuCloudStorageSynchroniser *syncSocket = new SaesuCloudStorageSynchroniser(this, socket);
+        SyncManagerSynchroniser *syncSocket = new SyncManagerSynchroniser(this, socket);
     }
 }
