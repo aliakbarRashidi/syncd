@@ -105,7 +105,7 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
     for (quint32 i = 0; i < itemCount; ++i) {
         SObjectLocalId uuid;
         QByteArray itemHash;
-        quint64 itemTS;
+        qint64 itemTS;
 
         stream >> uuid;
         stream >> itemHash;
@@ -177,7 +177,7 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
     SObject remoteItem;
     stream >> uuid;
     stream >> remoteItem;
-    
+
     QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
     QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
     bool saveItem = false;
