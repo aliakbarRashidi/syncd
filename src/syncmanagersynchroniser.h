@@ -19,6 +19,7 @@ public slots:
     void processData(const QByteArray &bytes);
 
     // command processing
+    void processDeleteList(QDataStream &stream);
     void processObjectList(QDataStream &stream);
     void processObjectRequest(QDataStream &stream);
     void processObjectReply(QDataStream &stream);
@@ -37,6 +38,13 @@ private:
 
     enum CommandTokens
     {
+        // listing all deleted object ids
+        // QString <cloudName>
+        // quint32 <objectCount>
+        // for objectCount iterations
+        //   SObjectLocalId deletedId
+        DeleteListCommand = 0x0,
+
         // listing all objects and metadata
         // QString: <cloudName>
         // quint32: <objectCount>
@@ -44,16 +52,16 @@ private:
         //  QByteArray: object uuid
         //  QString: object hash
         //  quint64: object timestamp
-        ObjectListCommand = 0x0,
+        ObjectListCommand = 0x1,
 
         // QString: <cloudName>
         // QByteArray: object uuid to request
-        ObjectRequestCommand = 0x1,
+        ObjectRequestCommand = 0x2,
 
         // QString: <cloudName>
         // QByteArray <uuid>
         // SCloudItem <item>, see libsaesu for exact formatting
-        ObjectReplyCommand = 0x2
+        ObjectReplyCommand = 0x3
     };
 };
 

@@ -48,25 +48,40 @@ void SyncManagerSynchroniser::startSync()
 
 void SyncManagerSynchroniser::syncCloud(const QString &cloudName)
 {
-    sDebug() << "Sending delete list";
+    {
+        sDebug() << "Sending delete list";
+        QList<SObjectLocalId> deleteList = SyncManager::instance()->deleteList();
+        QByteArray data;
+        QDataStream stream(&data, QIODevice::WriteOnly);
+        stream << cloudName;
+        stream << (quint32)deleteList.count();
 
-    sDebug() << "Sending object list";
-    QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
-
-    QByteArray data;
-    QDataStream stream(&data, QIODevice::WriteOnly);
-    stream << cloudName;
-    stream << (quint32)objects.count();
-
-    foreach (const SObjectLocalId &localId, objects.keys()) {
-        SObject &obj = objects[localId];
-
-        stream << localId;
-        stream << obj.hash();
-        stream << obj.lastSaved();
+        foreach (const SObjectLocalId &localId, deleteList) {
+            stream << localId;
+        }
+        
+        sendCommand(DeleteListCommand, data);
     }
+    
+    {
+        sDebug() << "Sending object list";
+        QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
 
-    sendCommand(ObjectListCommand, data);
+        QByteArray data;
+        QDataStream stream(&data, QIODevice::WriteOnly);
+        stream << cloudName;
+        stream << (quint32)objects.count();
+
+        foreach (const SObjectLocalId &localId, objects.keys()) {
+            SObject &obj = objects[localId];
+
+            stream << localId;
+            stream << obj.hash();
+            stream << obj.lastSaved();
+        }
+
+        sendCommand(ObjectListCommand, data);
+    }
 }
 
 void SyncManagerSynchroniser::onReadyRead()
@@ -87,6 +102,30 @@ void SyncManagerSynchroniser::onReadyRead()
         processData(bytes);
         mBytesExpected = 0;
     }
+}
+
+void SyncManagerSynchroniser::processDeleteList(QDataStream &stream)
+{
+    QString cloudName;
+    stream >> cloudName;
+
+    // sending a message, find message
+    sDebug() << "Processing a delete list";
+
+    quint32 itemCount;
+    stream >> itemCount;
+
+    sDebug() << itemCount << " items";
+    QList<SObjectLocalId> ids;
+
+    for (quint32 i = 0; i < itemCount; ++i) {
+        SObjectLocalId uuid;
+        
+        stream >> uuid;
+        ids.append(uuid);
+    }
+
+    SyncManager::instance()->ensureRemoved(ids);
 }
 
 void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
@@ -178,6 +217,11 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
     SObject remoteItem;
     stream >> uuid;
     stream >> remoteItem;
+    
+    if (SyncManager::instance()->isRemoved(uuid)) {
+        sDebug() << "Ignoring deleted UUID " << uuid;
+        return;
+    }
 
     QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
     QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
@@ -251,6 +295,9 @@ void SyncManagerSynchroniser::processData(const QByteArray &bytes)
     stream >> command;
 
     switch (command) {
+        case DeleteListCommand:
+            processDeleteList(stream);
+            break;
         case ObjectListCommand:
             processObjectList(stream);
             break;

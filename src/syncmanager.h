@@ -21,6 +21,7 @@
 // Qt
 #include <QObject>
 #include <QString>
+#include <QSet>
 
 // saesu
 #include <sobject.h>
@@ -38,7 +39,13 @@ public:
 
     QHash<SObjectLocalId, SObject> objects() const;
 
+    QList<SObjectLocalId> deleteList() const;
+
     SObjectManager *manager();
+
+    void ensureRemoved(const QList<SObjectLocalId> &ids);
+
+    bool isRemoved(const SObjectLocalId &id) const;
 
 signals:
     void resyncRequired();
@@ -46,10 +53,13 @@ signals:
 private slots:
     void readObjects();
     void onObjectsRead();
+    void onDeleteListRead();
 
 private:
     QHash<SObjectLocalId, SObject> mObjects;
     SObjectManager mManager;
+    QList<SObjectLocalId> mDeleteList;
+    QSet<SObjectLocalId> mDeleteListHash;
 };
 
 #endif // SYNCMANAGER_H

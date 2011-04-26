@@ -21,6 +21,8 @@
 // saesu
 #include <sobjectmanager.h>
 #include <sobjectfetchrequest.h>
+#include <sobjectremoverequest.h>
+#include <sdeletelistfetchrequest.h>
 
 // Us
 #include "syncmanager.h"
@@ -59,7 +61,13 @@ void SyncManager::readObjects()
 {
     SObjectFetchRequest *fetchRequest = new SObjectFetchRequest;
     connect(fetchRequest, SIGNAL(finished()), SLOT(onObjectsRead()));
+    connect(fetchRequest, SIGNAL(finished()), fetchRequest, SLOT(deleteLater()));
     fetchRequest->start(&mManager);
+    
+    SDeleteListFetchRequest *deleteFetchRequest = new SDeleteListFetchRequest;
+    connect(deleteFetchRequest, SIGNAL(finished()), SLOT(onDeleteListRead()));
+    connect(deleteFetchRequest, SIGNAL(finished()), deleteFetchRequest, SLOT(deleteLater()));
+    deleteFetchRequest->start(&mManager);
 }
 
 void SyncManager::onObjectsRead()
@@ -75,6 +83,44 @@ void SyncManager::onObjectsRead()
     }
 
     emit resyncRequired();
+}
+
+void SyncManager::onDeleteListRead()
+{
+    mDeleteList.clear();
+    SDeleteListFetchRequest *req = qobject_cast<SDeleteListFetchRequest*>(sender());
+
+    mDeleteList = req->objectIds();
+
+    foreach (const SObjectLocalId &id, mDeleteList) {
+        mDeleteListHash.insert(id);
+    }
+
+    emit resyncRequired();
+}
+
+void SyncManager::ensureRemoved(const QList<SObjectLocalId> &ids)
+{
+    SObjectRemoveRequest *removeRequest = new SObjectRemoveRequest;
+    connect(removeRequest, SIGNAL(finished()), removeRequest, SLOT(deleteLater()));
+    removeRequest->setObjectIds(ids);
+    removeRequest->start(&mManager);
+
+    mDeleteList.append(ids);
+
+    foreach (const SObjectLocalId &id, ids) {
+        mDeleteListHash.insert(id);
+    }
+}
+
+bool SyncManager::isRemoved(const SObjectLocalId &id) const
+{
+    return mDeleteListHash.contains(id);
+}
+
+QList<SObjectLocalId> SyncManager::deleteList() const
+{
+    return mDeleteList;
 }
 
 QHash<SObjectLocalId, SObject> SyncManager::objects() const
