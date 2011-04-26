@@ -43,45 +43,46 @@ void SyncManagerSynchroniser::startSync()
 {
      // TODO: dynamic picking
     connect(SyncManager::instance(), SIGNAL(resyncRequired()), SLOT(startSync()));
+    connect(SyncManager::instance(), SIGNAL(deleteListChanged()), SLOT(sendDeleteList()));
     syncCloud("saesu");
+}
+
+void SyncManagerSynchroniser::sendDeleteList()
+{
+    sDebug() << "Sending delete list";
+    QList<SObjectLocalId> deleteList = SyncManager::instance()->deleteList();
+    QByteArray data;
+    QDataStream stream(&data, QIODevice::WriteOnly);
+    stream << QString("saesu");
+    stream << (quint32)deleteList.count();
+
+    foreach (const SObjectLocalId &localId, deleteList) {
+        stream << localId;
+    }
+    
+    sendCommand(DeleteListCommand, data);
 }
 
 void SyncManagerSynchroniser::syncCloud(const QString &cloudName)
 {
-    {
-        sDebug() << "Sending delete list";
-        QList<SObjectLocalId> deleteList = SyncManager::instance()->deleteList();
-        QByteArray data;
-        QDataStream stream(&data, QIODevice::WriteOnly);
-        stream << cloudName;
-        stream << (quint32)deleteList.count();
+    sendDeleteList();
+    sDebug() << "Sending object list";
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
 
-        foreach (const SObjectLocalId &localId, deleteList) {
-            stream << localId;
-        }
-        
-        sendCommand(DeleteListCommand, data);
+    QByteArray data;
+    QDataStream stream(&data, QIODevice::WriteOnly);
+    stream << cloudName;
+    stream << (quint32)objects.count();
+
+    foreach (const SObjectLocalId &localId, objects.keys()) {
+        SObject &obj = objects[localId];
+
+        stream << localId;
+        stream << obj.hash();
+        stream << obj.lastSaved();
     }
-    
-    {
-        sDebug() << "Sending object list";
-        QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
 
-        QByteArray data;
-        QDataStream stream(&data, QIODevice::WriteOnly);
-        stream << cloudName;
-        stream << (quint32)objects.count();
-
-        foreach (const SObjectLocalId &localId, objects.keys()) {
-            SObject &obj = objects[localId];
-
-            stream << localId;
-            stream << obj.hash();
-            stream << obj.lastSaved();
-        }
-
-        sendCommand(ObjectListCommand, data);
-    }
+    sendCommand(ObjectListCommand, data);
 }
 
 void SyncManagerSynchroniser::onReadyRead()

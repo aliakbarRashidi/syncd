@@ -96,7 +96,7 @@ void SyncManager::onDeleteListRead()
         mDeleteListHash.insert(id);
     }
 
-    emit resyncRequired();
+    emit deleteListChanged();
 }
 
 void SyncManager::ensureRemoved(const QList<SObjectLocalId> &ids)

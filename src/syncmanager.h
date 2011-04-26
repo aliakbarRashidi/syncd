@@ -49,6 +49,7 @@ public:
 
 signals:
     void resyncRequired();
+    void deleteListChanged();
 
 private slots:
     void readObjects();

@@ -29,6 +29,7 @@ private slots:
     void onError(QAbstractSocket::SocketError error);
     void onDisconnected();
     void startSync();
+    void sendDeleteList();
     void syncCloud(const QString &cloudName);
     void sendCommand(quint8 token, const QByteArray &data);
 
