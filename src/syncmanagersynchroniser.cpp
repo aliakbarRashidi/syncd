@@ -28,6 +28,9 @@ SyncManagerSynchroniser::SyncManagerSynchroniser(QObject *parent, QTcpSocket *so
     connect(mSocket, SIGNAL(readyRead()), SLOT(onReadyRead()));
     connect(mSocket, SIGNAL(error(QAbstractSocket::SocketError)), SLOT(onError(QAbstractSocket::SocketError)));
     connect(mSocket, SIGNAL(disconnected()), SLOT(onDisconnected()));
+
+    connect(SyncManager::instance(), SIGNAL(resyncRequired()), SLOT(startSync()));
+    connect(SyncManager::instance(), SIGNAL(deleteListChanged()), SLOT(sendDeleteList()));
 }
 
 void SyncManagerSynchroniser::sendCommand(quint8 token, const QByteArray &data)
@@ -42,8 +45,6 @@ void SyncManagerSynchroniser::sendCommand(quint8 token, const QByteArray &data)
 void SyncManagerSynchroniser::startSync()
 {
      // TODO: dynamic picking
-    connect(SyncManager::instance(), SIGNAL(resyncRequired()), SLOT(startSync()));
-    connect(SyncManager::instance(), SIGNAL(deleteListChanged()), SLOT(sendDeleteList()));
     syncCloud("saesu");
 }
 
