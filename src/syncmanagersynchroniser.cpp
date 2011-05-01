@@ -2,6 +2,8 @@
 #include <QTcpSocket>
 #include <QHostAddress>
 #include <QDir>
+#include <QCoreApplication>
+#include <QDesktopServices>
 
 // Saesu
 #include <sobject.h>
@@ -28,9 +30,6 @@ SyncManagerSynchroniser::SyncManagerSynchroniser(QObject *parent, QTcpSocket *so
     connect(mSocket, SIGNAL(readyRead()), SLOT(onReadyRead()));
     connect(mSocket, SIGNAL(error(QAbstractSocket::SocketError)), SLOT(onError(QAbstractSocket::SocketError)));
     connect(mSocket, SIGNAL(disconnected()), SLOT(onDisconnected()));
-
-    connect(SyncManager::instance(), SIGNAL(resyncRequired()), SLOT(startSync()));
-    connect(SyncManager::instance(), SIGNAL(deleteListChanged()), SLOT(sendDeleteList()));
 }
 
 void SyncManagerSynchroniser::sendCommand(quint8 token, const QByteArray &data)
@@ -44,17 +43,42 @@ void SyncManagerSynchroniser::sendCommand(quint8 token, const QByteArray &data)
 
 void SyncManagerSynchroniser::startSync()
 {
-     // TODO: dynamic picking
-    syncCloud("saesu");
+     // TODO: listen for cloud add/remove
+    QString databasePath;
+    QCoreApplication *a = QCoreApplication::instance();
+
+    QString orgName = a->organizationName();
+    QString appName = a->applicationName();
+
+    a->setOrganizationName(QLatin1String("saesu"));
+    a->setApplicationName(QLatin1String("clouds"));
+
+    databasePath = QDesktopServices::storageLocation(QDesktopServices::DataLocation);
+    QDir databaseDir(databasePath);
+
+    QStringList databases = databaseDir.entryList(QDir::Files);
+
+    foreach (const QString &database, databases) {
+        connect(SyncManager::instance(database),
+                SIGNAL(resyncRequired(QString)),
+                SLOT(sendObjectList(QString)),
+                Qt::UniqueConnection);
+        connect(SyncManager::instance(database),
+                SIGNAL(deleteListChanged(QString)),
+                SLOT(sendDeleteList(QString)),
+                Qt::UniqueConnection);
+        sendDeleteList(database);
+        sendObjectList(database);
+    }
 }
 
-void SyncManagerSynchroniser::sendDeleteList()
+void SyncManagerSynchroniser::sendDeleteList(const QString &managerName)
 {
     sDebug() << "Sending delete list";
-    QList<SObjectLocalId> deleteList = SyncManager::instance()->deleteList();
+    QList<SObjectLocalId> deleteList = SyncManager::instance(managerName)->deleteList();
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
-    stream << QString("saesu");
+    stream << managerName;
     stream << (quint32)deleteList.count();
 
     foreach (const SObjectLocalId &localId, deleteList) {
@@ -64,11 +88,10 @@ void SyncManagerSynchroniser::sendDeleteList()
     sendCommand(DeleteListCommand, data);
 }
 
-void SyncManagerSynchroniser::syncCloud(const QString &cloudName)
+void SyncManagerSynchroniser::sendObjectList(const QString &cloudName)
 {
-    sendDeleteList();
     sDebug() << "Sending object list";
-    QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objects();
 
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
@@ -127,7 +150,7 @@ void SyncManagerSynchroniser::processDeleteList(QDataStream &stream)
         ids.append(uuid);
     }
 
-    SyncManager::instance()->ensureRemoved(ids);
+    SyncManager::instance(cloudName)->ensureRemoved(ids);
 }
 
 void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
@@ -137,7 +160,7 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
 
     // sending a message, find message
     sDebug() << "Processing an object list";
-    QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objects();
 
     quint32 itemCount;
     stream >> itemCount;
@@ -188,7 +211,7 @@ void SyncManagerSynchroniser::processObjectRequest(QDataStream &stream)
     SObjectLocalId uuid;
     stream >> uuid;
 
-    QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objects();
     QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
     if (cit == objects.end()) {
         sDebug() << "Recieved a request for a nonexistant item! UUID: " << uuid;
@@ -220,12 +243,12 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
     stream >> uuid;
     stream >> remoteItem;
     
-    if (SyncManager::instance()->isRemoved(uuid)) {
+    if (SyncManager::instance(cloudName)->isRemoved(uuid)) {
         sDebug() << "Ignoring deleted UUID " << uuid;
         return;
     }
 
-    QHash<SObjectLocalId, SObject> objects = SyncManager::instance()->objects();
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objects();
     QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
     bool saveItem = false;
 
@@ -285,7 +308,7 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
         connect(saveRequest, SIGNAL(finished()), saveRequest, SLOT(deleteLater()));
         saveRequest->add(remoteItem);
         saveRequest->setSaveHint(SObjectSaveRequest::ObjectFromSync);
-        saveRequest->start(SyncManager::instance()->manager());
+        saveRequest->start(SyncManager::instance(cloudName)->manager());
     }
 }
 

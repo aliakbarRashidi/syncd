@@ -27,9 +27,10 @@
 // Us
 #include "syncmanager.h"
 
-SyncManager::SyncManager()
+SyncManager::SyncManager(const QString &managerName)
      : QObject()
-     , mManager("saesu")
+     , mManager(managerName)
+     , mManagerName(managerName)
 {
     connect(&mManager, SIGNAL(objectsAdded(QList<SObjectLocalId>)), SLOT(readObjects()));
     connect(&mManager, SIGNAL(objectsRemoved(QList<SObjectLocalId>)), SLOT(readObjects()));
@@ -42,14 +43,18 @@ SyncManager::~SyncManager()
 {
 }
 
-SyncManager *SyncManager::instance()
+SyncManager *SyncManager::instance(const QString &managerName)
 {
-    static SyncManager *manager = NULL;
+    static QHash<QString, SyncManager *> managerMap;
 
-    if (!manager)
-        manager = new SyncManager;
+    QHash<QString, SyncManager *>::ConstIterator it = managerMap.find(managerName);
+    if (it == managerMap.end()) {
+        SyncManager *manager = new SyncManager(managerName);
+        managerMap.insert(managerName, manager);
+        return manager;
+    }
 
-    return manager;
+    return *it;
 }
 
 SObjectManager *SyncManager::manager()
@@ -82,7 +87,7 @@ void SyncManager::onObjectsRead()
         mObjects.insert(object.id().localId(), object);
     }
 
-    emit resyncRequired();
+    emit resyncRequired(mManagerName);
 }
 
 void SyncManager::onDeleteListRead()
@@ -96,7 +101,7 @@ void SyncManager::onDeleteListRead()
         mDeleteListHash.insert(id);
     }
 
-    emit deleteListChanged();
+    emit deleteListChanged(mManagerName);
 }
 
 void SyncManager::ensureRemoved(const QList<SObjectLocalId> &ids)
