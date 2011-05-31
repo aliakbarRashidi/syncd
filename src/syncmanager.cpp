@@ -119,16 +119,22 @@ void SyncManager::onDeleteListRead()
 
 void SyncManager::ensureRemoved(const QList<SObjectLocalId> &ids)
 {
-    SObjectRemoveRequest *removeRequest = new SObjectRemoveRequest;
-    connect(removeRequest, SIGNAL(finished()), removeRequest, SLOT(deleteLater()));
-    removeRequest->setObjectIds(ids);
-    removeRequest->start(&mManager);
-
-    mDeleteList.append(ids);
+    QList<SObjectLocalId> notRemovedYet;
 
     foreach (const SObjectLocalId &id, ids) {
+        if (mDeleteListHash.contains(id))
+            continue;
+
+        notRemovedYet.append(id);
         mDeleteListHash.insert(id);
     }
+
+    SObjectRemoveRequest *removeRequest = new SObjectRemoveRequest;
+    connect(removeRequest, SIGNAL(finished()), removeRequest, SLOT(deleteLater()));
+    removeRequest->setObjectIds(notRemovedYet);
+    removeRequest->start(&mManager);
+
+    mDeleteList.append(notRemovedYet);
 }
 
 bool SyncManager::isRemoved(const SObjectLocalId &id) const
