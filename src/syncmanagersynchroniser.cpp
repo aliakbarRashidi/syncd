@@ -64,24 +64,23 @@ void SyncManagerSynchroniser::startSync()
                 SLOT(sendObjectList(QString)),
                 Qt::UniqueConnection);
         connect(SyncManager::instance(database),
-                SIGNAL(deleteListChanged(QString)),
-                SLOT(sendDeleteList(QString)),
+                SIGNAL(objectsDeleted(QString,QList<SObjectLocalId>)),
+                SLOT(sendDeleteList(QString,QList<SObjectLocalId>)),
                 Qt::UniqueConnection);
-        sendDeleteList(database);
+        sendDeleteList(database, SyncManager::instance(database)->deleteList());
         sendObjectList(database);
     }
 }
 
-void SyncManagerSynchroniser::sendDeleteList(const QString &managerName)
+void SyncManagerSynchroniser::sendDeleteList(const QString &managerName, const QList<SObjectLocalId> &ids)
 {
-    sDebug() << "Sending delete list";
-    QList<SObjectLocalId> deleteList = SyncManager::instance(managerName)->deleteList();
+    sDebug() << "Sending delete list of " << ids.count() << " items";
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
     stream << managerName;
-    stream << (quint32)deleteList.count();
+    stream << (quint32)ids.count();
 
-    foreach (const SObjectLocalId &localId, deleteList) {
+    foreach (const SObjectLocalId &localId, ids) {
         stream << localId;
     }
     

@@ -49,12 +49,13 @@ public:
 
 signals:
     void resyncRequired(const QString &managerName);
-    void deleteListChanged(const QString &managerName);
+    void objectsDeleted(const QString &managerName, const QList<SObjectLocalId> &ids);
 
 private slots:
     void readObjects();
     void onObjectsRead();
     void onDeleteListRead();
+    void onObjectsRemoved(const QList<SObjectLocalId> &ids);
 
 private:
     QHash<SObjectLocalId, SObject> mObjects;

@@ -7,6 +7,7 @@
 
 // Saesu
 class SCloudStorage;
+#include "sobject.h";
 
 class SyncManagerSynchroniser : public QObject
 {
@@ -30,7 +31,7 @@ private slots:
     void onError(QAbstractSocket::SocketError error);
     void onDisconnected();
     void startSync();
-    void sendDeleteList(const QString &managerName);
+    void sendDeleteList(const QString &managerName, const QList<SObjectLocalId> &ids);
     void sendObjectList(const QString &cloudName);
     void sendCommand(quint8 token, const QByteArray &data);
 

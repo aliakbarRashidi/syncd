@@ -33,7 +33,7 @@ SyncManager::SyncManager(const QString &managerName)
      , mManagerName(managerName)
 {
     connect(&mManager, SIGNAL(objectsAdded(QList<SObjectLocalId>)), SLOT(readObjects()));
-    connect(&mManager, SIGNAL(objectsRemoved(QList<SObjectLocalId>)), SLOT(readObjects()));
+    connect(&mManager, SIGNAL(objectsRemoved(QList<SObjectLocalId>)), SLOT(onObjectsRemoved(QList<SObjectLocalId>)));
     connect(&mManager, SIGNAL(objectsUpdated(QList<SObjectLocalId>)), SLOT(readObjects()));
 
     readObjects();
@@ -90,6 +90,19 @@ void SyncManager::onObjectsRead()
     emit resyncRequired(mManagerName);
 }
 
+void SyncManager::onObjectsRemoved(const QList<SObjectLocalId> &ids)
+{
+    // don't clear the list here, we haven't got the full list
+    mDeleteList.append(ids);
+
+    foreach (const SObjectLocalId &id, ids) {
+        mDeleteListHash.insert(id);
+    }
+
+
+    emit objectsDeleted(mManagerName, ids);
+}
+
 void SyncManager::onDeleteListRead()
 {
     mDeleteList.clear();
@@ -101,7 +114,7 @@ void SyncManager::onDeleteListRead()
         mDeleteListHash.insert(id);
     }
 
-    emit deleteListChanged(mManagerName);
+    emit objectsDeleted(mManagerName, mDeleteList);
 }
 
 void SyncManager::ensureRemoved(const QList<SObjectLocalId> &ids)
