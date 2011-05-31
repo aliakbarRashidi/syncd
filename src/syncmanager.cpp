@@ -1,18 +1,12 @@
 /*
  * Copyright (C) 2011 Robin Burchell <viroteck@viroteck.net>
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU Lesser General Public License,
- * version 2.1, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope it will be useful, but WITHOUT ANY
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
+ * This software, and all associated material(s), including but not limited
+ * to documentation are protected by copyright. All rights reserved.
+ * Copying, including reproducing, storing, adapting, translating, or
+ * reverse-engineering any or all of this material requires prior written
+ * consent. This material also contains confidential information which
+ * may not be disclosed in any form without prior written consent.
  */
 
 // Qt
