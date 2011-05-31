@@ -129,6 +129,9 @@ void SyncManager::ensureRemoved(const QList<SObjectLocalId> &ids)
         mDeleteListHash.insert(id);
     }
 
+    if (notRemovedYet.count() == 0)
+        return; // no need to start an empty request
+
     SObjectRemoveRequest *removeRequest = new SObjectRemoveRequest;
     connect(removeRequest, SIGNAL(finished()), removeRequest, SLOT(deleteLater()));
     removeRequest->setObjectIds(notRemovedYet);
