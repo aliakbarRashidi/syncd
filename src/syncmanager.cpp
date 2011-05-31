@@ -37,6 +37,11 @@ SyncManager::SyncManager(const QString &managerName)
     connect(&mManager, SIGNAL(objectsUpdated(QList<SObjectLocalId>)), SLOT(readObjects()));
 
     readObjects();
+
+    SDeleteListFetchRequest *deleteFetchRequest = new SDeleteListFetchRequest;
+    connect(deleteFetchRequest, SIGNAL(finished()), SLOT(onDeleteListRead()));
+    connect(deleteFetchRequest, SIGNAL(finished()), deleteFetchRequest, SLOT(deleteLater()));
+    deleteFetchRequest->start(&mManager);
 }
 
 SyncManager::~SyncManager()
@@ -68,11 +73,6 @@ void SyncManager::readObjects()
     connect(fetchRequest, SIGNAL(finished()), SLOT(onObjectsRead()));
     connect(fetchRequest, SIGNAL(finished()), fetchRequest, SLOT(deleteLater()));
     fetchRequest->start(&mManager);
-    
-    SDeleteListFetchRequest *deleteFetchRequest = new SDeleteListFetchRequest;
-    connect(deleteFetchRequest, SIGNAL(finished()), SLOT(onDeleteListRead()));
-    connect(deleteFetchRequest, SIGNAL(finished()), deleteFetchRequest, SLOT(deleteLater()));
-    deleteFetchRequest->start(&mManager);
 }
 
 void SyncManager::onObjectsRead()
