@@ -54,10 +54,22 @@ void BonjourServiceResolver::cleanupResolve()
 
 void BonjourServiceResolver::resolveBonjourRecord(const BonjourRecord &record)
 {
+    mBonjourRecords.append(record);
+
     if (dnssref) {
-        qWarning("resolve in process, aborting");
+        qDebug("resolve in process, aborting");
         return;
     }
+
+    resolveNextRecord();
+}
+
+void BonjourServiceResolver::resolveNextRecord()
+{
+    // TODO: don't close DNSService after each resolution
+    // TODO: emit BonjourRecord on error() or success, so caller
+    // can associate response with request
+    BonjourRecord record = mBonjourRecords.takeFirst();
     DNSServiceErrorType err = DNSServiceResolve(&dnssref, 0, 0,
                                                 record.serviceName.toUtf8().constData(),
                                                 record.registeredType.toUtf8().constData(),

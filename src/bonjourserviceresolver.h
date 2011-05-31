@@ -52,6 +52,7 @@ signals:
     void error(DNSServiceErrorType error);
 
 private slots:
+    void resolveNextRecord();
     void bonjourSocketReadyRead();
     void cleanupResolve();
     void finishConnect(const QHostInfo &hostInfo);
@@ -64,6 +65,7 @@ private:
     DNSServiceRef dnssref;
     QSocketNotifier *bonjourSocket;
     int bonjourPort;
+    QList<BonjourRecord> mBonjourRecords;
 };
 
 #endif // BONJOURSERVICERESOLVER_H
