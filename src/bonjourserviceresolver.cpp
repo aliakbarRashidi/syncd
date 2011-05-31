@@ -29,6 +29,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <QtCore/QSocketNotifier>
 #include <QtNetwork/QHostInfo>
 
+#include "sglobal.h"
 #include "bonjourrecord.h"
 #include "bonjourserviceresolver.h"
 
@@ -50,6 +51,8 @@ void BonjourServiceResolver::cleanupResolve()
         delete bonjourSocket;
         bonjourPort = -1;
     }
+
+    resolveNextRecord();
 }
 
 void BonjourServiceResolver::resolveBonjourRecord(const BonjourRecord &record)
@@ -66,6 +69,11 @@ void BonjourServiceResolver::resolveBonjourRecord(const BonjourRecord &record)
 
 void BonjourServiceResolver::resolveNextRecord()
 {
+    if (mBonjourRecords.count() == 0) {
+        sDebug() << "Done resolving";
+        return;
+    }
+
     // TODO: don't close DNSService after each resolution
     // TODO: emit BonjourRecord on error() or success, so caller
     // can associate response with request
