@@ -66,6 +66,7 @@ void SyncAdvertiser::connectToServer(const QHostInfo &address, int port)
         if (remoteAddr.protocol() == QAbstractSocket::IPv4Protocol) {
             qDebug() << address.addresses() << " said hello, connecting back...";
             SyncManagerSynchroniser *syncSocket = new SyncManagerSynchroniser(this);
+            connect(syncSocket, SIGNAL(destroyed()), SLOT(onDisconnected()));
             syncSocket->connectToHost(remoteAddr);
             mSyncers.append(syncSocket);
         }
@@ -78,6 +79,13 @@ void SyncAdvertiser::onNewConnection()
     while (mServer.hasPendingConnections()) {
         QTcpSocket *socket = mServer.nextPendingConnection();
         SyncManagerSynchroniser *syncSocket = new SyncManagerSynchroniser(this, socket);
+        connect(syncSocket, SIGNAL(destroyed()), SLOT(onDisconnected()));
         mSyncers.append(syncSocket);
     }
+}
+
+void SyncAdvertiser::onDisconnected()
+{
+    SyncManagerSynchroniser *mgr = static_cast<SyncManagerSynchroniser*>(sender());
+    mSyncers.removeAll(mgr);
 }

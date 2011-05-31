@@ -19,6 +19,7 @@ private slots:
     void updateRecords(const QList<BonjourRecord> &list);
     void connectToServer(const QHostInfo &address, int port);
     void onNewConnection();
+    void onDisconnected();
 
 private:
     BonjourServiceResolver *mBonjourResolver;
