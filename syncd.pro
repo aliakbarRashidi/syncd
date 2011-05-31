@@ -3,6 +3,10 @@ TEMPLATE = app
 TARGET = saesu-syncd
 DEPENDPATH += .
 
+unix:!mac {
+    LIBS += -ldns_sd
+}
+
 MOC_DIR = ./.moc/
 OBJECTS_DIR = ./.obj/
 
