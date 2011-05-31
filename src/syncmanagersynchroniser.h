@@ -17,6 +17,7 @@ public:
 public slots:
     void connectToHost(const QHostAddress &address);
     void processData(const QByteArray &bytes);
+    void disconnectFromHost() { mSocket->disconnectFromHost(); }
 
     // command processing
     void processDeleteList(QDataStream &stream);

@@ -2,8 +2,12 @@
 #define SYNCADVERTISER_H
 
 #include <QObject>
-#include <QUdpSocket>
 #include <QTcpServer>
+#include <QHostInfo>
+
+#include "bonjourrecord.h"
+class BonjourServiceResolver;
+class SyncManagerSynchroniser;
 
 class SyncAdvertiser : public QObject
 {
@@ -12,12 +16,14 @@ public:
     explicit SyncAdvertiser(QObject *parent = 0);
 
 private slots:
-    void onReadyRead();
+    void updateRecords(const QList<BonjourRecord> &list);
+    void connectToServer(const QHostInfo &address, int port);
     void onNewConnection();
 
 private:
-    QUdpSocket mBroadcaster;
+    BonjourServiceResolver *mBonjourResolver;
     QTcpServer mServer;
+    QList<SyncManagerSynchroniser *> mSyncers;
 };
 
 #endif // SYNCADVERTISER_H

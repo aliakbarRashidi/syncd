@@ -8,51 +8,67 @@
 // Us
 #include "syncadvertiser.h"
 #include "syncmanagersynchroniser.h"
+#include "bonjourservicebrowser.h"
+#include "bonjourserviceresolver.h"
 
 SyncAdvertiser::SyncAdvertiser(QObject *parent)
     : QObject(parent)
 {
-    if (!mBroadcaster.bind(QHostAddress::Broadcast, 1337)) {
-        qDebug("Couldn't bind UDP; presuming another instance running");
-        exit(1);
-    }
+    BonjourServiceBrowser *bonjourBrowser = new BonjourServiceBrowser(this);
+
+    connect(bonjourBrowser, SIGNAL(currentBonjourRecordsChanged(const QList<BonjourRecord> &)),
+            this, SLOT(updateRecords(const QList<BonjourRecord> &)));
+    bonjourBrowser->browseForServiceType(QLatin1String("_saesu._tcp"));
+
+    mBonjourResolver = new BonjourServiceResolver(this);
+    connect(mBonjourResolver, SIGNAL(bonjourRecordResolved(const QHostInfo &, int)),
+            this, SLOT(connectToServer(const QHostInfo &, int)));
 
     if (!mServer.listen(QHostAddress::Any, 1337)) {
         qDebug("Couldn't bind TCP; presuming another instance running");
         exit(1);
     }
 
-    // let the world know that we are ready for business
-    mBroadcaster.writeDatagram("HELLO", 5, QHostAddress::Broadcast, 1337);
-
     // and open for business
-    connect(&mBroadcaster, SIGNAL(readyRead()), SLOT(onReadyRead()));
     connect(&mServer, SIGNAL(newConnection()), SLOT(onNewConnection()));
 }
 
-void SyncAdvertiser::onReadyRead()
+void SyncAdvertiser::updateRecords(const QList<BonjourRecord> &list)
 {
-    QHostAddress senderAddress;
-    quint16      senderPort;
-    QByteArray   datagram(5, 0);
+    // TODO: optimisation here would be to not drop any connections
+    // we should only open connections to *new* services
+    foreach (SyncManagerSynchroniser *syncer, mSyncers) {
+        syncer->disconnectFromHost();
+        syncer->deleteLater();
+    }
 
-    int returnedSize = mBroadcaster.readDatagram(datagram.data(), datagram.size(),
-                                                 &senderAddress, &senderPort);
+    foreach (const BonjourRecord &record, list) {
+        mBonjourResolver->resolveBonjourRecord(record);
+    }
+}
 
+void SyncAdvertiser::connectToServer(const QHostInfo &address, int port)
+{
     QNetworkInterface iface;
 
     foreach (const QHostAddress &addr, iface.allAddresses()) {
-        if (senderAddress == addr) {
-            sDebug() << "Dropping broadcast from myself (" << senderAddress << ")";
-            return;
+        foreach (const QHostAddress &remoteAddr, address.addresses()) {
+            if (remoteAddr == addr) {
+                sDebug() << "Dropping broadcast from myself (" << remoteAddr << ")";
+                return;
+            }
         }
     }
 
-    if (returnedSize == 5 && datagram == "HELLO") {
-        // Great joy
-        qDebug() << senderAddress << " said " << datagram << ", connecting back...";
-        SyncManagerSynchroniser *syncSocket = new SyncManagerSynchroniser(this);
-        syncSocket->connectToHost(senderAddress);
+    // TODO: handle this properly by queueing addresses and trying each of them until we find one that works
+    // TODO: this breaks ipv6 until we do
+    foreach (const QHostAddress &remoteAddr, address.addresses()) {
+        if (remoteAddr.protocol() == QAbstractSocket::IPv4Protocol) {
+            qDebug() << address.addresses() << " said hello, connecting back...";
+            SyncManagerSynchroniser *syncSocket = new SyncManagerSynchroniser(this);
+            syncSocket->connectToHost(remoteAddr);
+            mSyncers.append(syncSocket);
+        }
     }
 }
 
@@ -62,5 +78,6 @@ void SyncAdvertiser::onNewConnection()
     while (mServer.hasPendingConnections()) {
         QTcpSocket *socket = mServer.nextPendingConnection();
         SyncManagerSynchroniser *syncSocket = new SyncManagerSynchroniser(this, socket);
+        mSyncers.append(syncSocket);
     }
 }
