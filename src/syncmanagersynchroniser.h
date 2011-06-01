@@ -18,7 +18,7 @@
 
 // Saesu
 class SCloudStorage;
-#include "sobject.h";
+#include "sobject.h"
 
 class SyncManagerSynchroniser : public QObject
 {
