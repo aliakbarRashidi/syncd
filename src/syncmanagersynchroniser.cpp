@@ -102,6 +102,9 @@ void SyncManagerSynchroniser::sendObjectList(const QString &cloudName, const QLi
 {
     sDebug() << "Sending object list of " << objects.count() << " items";
 
+    if (!objects.count())
+        return;
+
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
     stream << cloudName;
