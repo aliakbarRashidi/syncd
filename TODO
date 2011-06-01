@@ -5,3 +5,7 @@
 [ ] Don't drop connections to existing sync daemons whenever a syncd instance appears/disappears (bonjour)
 [ ] Move Bonjour code to libsaesu
 [ ] User authentication
+    [ ] SSL
+    [ ] Fingerprint verification of certificate
+    [ ] Share verified fingerprints across the network, store them
+    [ ] GUI to make all this work, somehow, instead of autoconnects to all devices
