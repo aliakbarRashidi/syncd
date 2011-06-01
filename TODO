@@ -1,3 +1,4 @@
+[ ] Don't allow synchronisation between syncd instances where time delta is >1000ms
 [ ] Don't load all objects on startup
 [ ] Wait for clouds to be ready before starting to synchronise
 [ ] Use some kind of notification mechanism to watch for new clouds
