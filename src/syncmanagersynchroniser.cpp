@@ -71,15 +71,15 @@ void SyncManagerSynchroniser::startSync()
 
     foreach (const QString &database, databases) {
         connect(SyncManager::instance(database),
-                SIGNAL(resyncRequired(QString)),
-                SLOT(sendObjectList(QString)),
+                SIGNAL(objectsAddedOrUpdated(QString,QList<SObject>)),
+                SLOT(sendObjectList(QString,QList<SObject>)),
                 Qt::UniqueConnection);
         connect(SyncManager::instance(database),
                 SIGNAL(objectsDeleted(QString,QList<SObjectLocalId>)),
                 SLOT(sendDeleteList(QString,QList<SObjectLocalId>)),
                 Qt::UniqueConnection);
         sendDeleteList(database, SyncManager::instance(database)->deleteList());
-        sendObjectList(database);
+        sendObjectList(database, SyncManager::instance(database)->objects());
     }
 }
 
@@ -98,20 +98,17 @@ void SyncManagerSynchroniser::sendDeleteList(const QString &managerName, const Q
     sendCommand(DeleteListCommand, data);
 }
 
-void SyncManagerSynchroniser::sendObjectList(const QString &cloudName)
+void SyncManagerSynchroniser::sendObjectList(const QString &cloudName, const QList<SObject> &objects)
 {
-    sDebug() << "Sending object list";
-    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objects();
+    sDebug() << "Sending object list of " << objects.count() << " items";
 
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
     stream << cloudName;
     stream << (quint32)objects.count();
 
-    foreach (const SObjectLocalId &localId, objects.keys()) {
-        SObject &obj = objects[localId];
-
-        stream << localId;
+    foreach (const SObject &obj, objects) {
+        stream << obj.id().localId();
         stream << obj.hash();
         stream << obj.lastSaved();
     }
@@ -170,7 +167,7 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
 
     // sending a message, find message
     sDebug() << "Processing an object list";
-    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objects();
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objectHash();
 
     quint32 itemCount;
     stream >> itemCount;
@@ -221,7 +218,7 @@ void SyncManagerSynchroniser::processObjectRequest(QDataStream &stream)
     SObjectLocalId uuid;
     stream >> uuid;
 
-    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objects();
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objectHash();
     QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
     if (cit == objects.end()) {
         sDebug() << "Recieved a request for a nonexistant item! UUID: " << uuid;
@@ -258,7 +255,7 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
         return;
     }
 
-    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objects();
+    QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objectHash();
     QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
     bool saveItem = false;
 

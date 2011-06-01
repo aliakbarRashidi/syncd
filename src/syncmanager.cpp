@@ -17,6 +17,7 @@
 #include <sobjectfetchrequest.h>
 #include <sobjectremoverequest.h>
 #include <sdeletelistfetchrequest.h>
+#include <sobjectlocalidfilter.h>
 
 // Us
 #include "syncmanager.h"
@@ -26,11 +27,11 @@ SyncManager::SyncManager(const QString &managerName)
      , mManager(managerName)
      , mManagerName(managerName)
 {
-    connect(&mManager, SIGNAL(objectsAdded(QList<SObjectLocalId>)), SLOT(readObjects()));
+    connect(&mManager, SIGNAL(objectsAdded(QList<SObjectLocalId>)), SLOT(readObjects(QList<SObjectLocalId>)));
     connect(&mManager, SIGNAL(objectsRemoved(QList<SObjectLocalId>)), SLOT(onObjectsRemoved(QList<SObjectLocalId>)));
-    connect(&mManager, SIGNAL(objectsUpdated(QList<SObjectLocalId>)), SLOT(readObjects()));
+    connect(&mManager, SIGNAL(objectsUpdated(QList<SObjectLocalId>)), SLOT(readObjects(QList<SObjectLocalId>)));
 
-    readObjects();
+    readObjects(QList<SObjectLocalId>());
 
     SDeleteListFetchRequest *deleteFetchRequest = new SDeleteListFetchRequest;
     connect(deleteFetchRequest, SIGNAL(finished()), SLOT(onDeleteListRead()));
@@ -61,9 +62,16 @@ SObjectManager *SyncManager::manager()
     return &mManager;
 }
 
-void SyncManager::readObjects()
+void SyncManager::readObjects(const QList<SObjectLocalId> &ids)
 {
     SObjectFetchRequest *fetchRequest = new SObjectFetchRequest;
+
+    if (ids.count()) {
+        SObjectLocalIdFilter filter;
+        filter.setIds(ids);
+        fetchRequest->setFilter(filter);
+    }
+
     connect(fetchRequest, SIGNAL(finished()), SLOT(onObjectsRead()));
     connect(fetchRequest, SIGNAL(finished()), fetchRequest, SLOT(deleteLater()));
     fetchRequest->start(&mManager);
@@ -71,8 +79,6 @@ void SyncManager::readObjects()
 
 void SyncManager::onObjectsRead()
 {
-    mObjects.clear();
-
     SObjectFetchRequest *req = qobject_cast<SObjectFetchRequest*>(sender());
 
     QList<SObject> objects = req->objects();
@@ -81,7 +87,7 @@ void SyncManager::onObjectsRead()
         mObjects.insert(object.id().localId(), object);
     }
 
-    emit resyncRequired(mManagerName);
+    emit objectsAddedOrUpdated(mManagerName, objects);
 }
 
 void SyncManager::onObjectsRemoved(const QList<SObjectLocalId> &ids)
@@ -144,7 +150,17 @@ QList<SObjectLocalId> SyncManager::deleteList() const
     return mDeleteList;
 }
 
-QHash<SObjectLocalId, SObject> SyncManager::objects() const
+QList<SObject> SyncManager::objects() const
+{
+    QList<SObject> objectsList;
+    foreach (const SObject &obj, mObjects) {
+        objectsList.append(obj);
+    }
+
+    return objectsList;
+}
+
+QHash<SObjectLocalId, SObject> SyncManager::objectHash() const
 {
     return mObjects;
 }

@@ -43,7 +43,7 @@ private slots:
     void onDisconnected();
     void startSync();
     void sendDeleteList(const QString &managerName, const QList<SObjectLocalId> &ids);
-    void sendObjectList(const QString &cloudName);
+    void sendObjectList(const QString &cloudName, const QList<SObject> &objects);
     void sendCommand(quint8 token, const QByteArray &data);
 
 private:

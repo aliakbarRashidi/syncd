@@ -31,7 +31,9 @@ public:
 
     static SyncManager *instance(const QString &managerName);
 
-    QHash<SObjectLocalId, SObject> objects() const;
+    QList<SObject> objects() const;
+
+    QHash<SObjectLocalId, SObject> objectHash() const;
 
     QList<SObjectLocalId> deleteList() const;
 
@@ -42,11 +44,11 @@ public:
     bool isRemoved(const SObjectLocalId &id) const;
 
 signals:
-    void resyncRequired(const QString &managerName);
+    void objectsAddedOrUpdated(const QString &managerName, const QList<SObject> &objects);
     void objectsDeleted(const QString &managerName, const QList<SObjectLocalId> &ids);
 
 private slots:
-    void readObjects();
+    void readObjects(const QList<SObjectLocalId> &ids);
     void onObjectsRead();
     void onDeleteListRead();
     void onObjectsRemoved(const QList<SObjectLocalId> &ids);
