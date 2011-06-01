@@ -4,3 +4,4 @@
 [ ] Investigate incremental sends vs batch sends (i.e. send object lists of 100 each to allow for some interleaving of requests)
 [ ] Don't drop connections to existing sync daemons whenever a syncd instance appears/disappears (bonjour)
 [ ] Move Bonjour code to libsaesu
+[ ] User authentication
