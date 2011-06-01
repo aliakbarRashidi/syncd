@@ -1,4 +1,5 @@
 [ ] Don't allow synchronisation between syncd instances where time delta is >1000ms
+[ ] Review protocol and make sure we're sending everything in the most basic units possible, don't rely on Qt's synchronisation of e.g. QString and other types
 [ ] Don't load all objects on startup
 [ ] Wait for clouds to be ready before starting to synchronise
 [ ] Use some kind of notification mechanism to watch for new clouds
