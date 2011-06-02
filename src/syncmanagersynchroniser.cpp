@@ -69,6 +69,15 @@ void SyncManagerSynchroniser::startSync()
 
     QStringList databases = databaseDir.entryList(QDir::Files);
 
+    {
+        // send current time
+        QByteArray data;
+        QDataStream stream(&data, QIODevice::WriteOnly);
+        stream << (qint64)QDateTime::currentMSecsSinceEpoch(); // TODO: endianness
+
+        sendCommand(CurrentTimeCommand, data);
+    }
+
     foreach (const QString &database, databases) {
         connect(SyncManager::instance(database),
                 SIGNAL(objectsAddedOrUpdated(QString,QList<SObject>)),
@@ -322,6 +331,24 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
     }
 }
 
+void SyncManagerSynchroniser::processCurrentTime(QDataStream &stream)
+{
+    qint64 currentTime;
+    stream >> currentTime;
+
+    qint64 delta = currentTime - QDateTime::currentMSecsSinceEpoch();
+    if (delta < 0)
+        delta *= -1;
+
+    if (delta > 3000) {
+        sWarning() << "Synchronisation with " << mSocket->peerAddress() << " aborted! Time delta is too high: " << delta;
+        mSocket->disconnectFromHost();
+        return;
+    } else if (delta > 0) {
+        sDebug() << "Synchronisation delta with " << mSocket->peerAddress() << " is " << delta;
+    }
+}
+
 void SyncManagerSynchroniser::processData(const QByteArray &bytes)
 {
     QDataStream stream(bytes);
@@ -330,6 +357,9 @@ void SyncManagerSynchroniser::processData(const QByteArray &bytes)
     stream >> command;
 
     switch (command) {
+        case CurrentTimeCommand:
+            processCurrentTime(stream);
+            break;
         case DeleteListCommand:
             processDeleteList(stream);
             break;

@@ -32,6 +32,7 @@ public slots:
     void disconnectFromHost() { mSocket->disconnectFromHost(); }
 
     // command processing
+    void processCurrentTime(QDataStream &stream);
     void processDeleteList(QDataStream &stream);
     void processObjectList(QDataStream &stream);
     void processObjectRequest(QDataStream &stream);
@@ -49,6 +50,13 @@ private slots:
 private:
     QTcpSocket *mSocket;
     quint32 mBytesExpected;
+
+    // expected handshake proceedure:
+    // exchange auth (TBD)
+    // exchange CurrentTimeCommand, abort if excessive delta
+    // exchange DeleteListCommand(s), delete objects as appropriate
+    // exchange ObjectListCommand(s), interleave with ObjectRequestCommand(s)
+    // reply with ObjectReplyCommand instances
 
     enum CommandTokens
     {
@@ -75,7 +83,12 @@ private:
         // QString: <cloudName>
         // QByteArray <uuid>
         // SCloudItem <item>, see libsaesu for exact formatting
-        ObjectReplyCommand = 0x3
+        ObjectReplyCommand = 0x3,
+
+        // used to inform the other side as to what the time is from our point of view
+        // if the time delta is excessive, synchronisation will be halted
+        // qint64: milliseconds since the epoch
+        CurrentTimeCommand = 0x4
     };
 };
 

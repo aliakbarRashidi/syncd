@@ -1,8 +1,11 @@
-[ ] Don't allow synchronisation between syncd instances where time delta is >1000ms
+v0.3
+[x] Don't allow synchronisation between syncd instances where time delta is excessive
 [ ] Review protocol and make sure we're sending everything in the most basic units possible, don't rely on Qt's synchronisation of e.g. QString and other types
+[ ] Use some kind of notification mechanism to watch for new clouds
+
+future
 [ ] Don't load all objects on startup
 [ ] Wait for clouds to be ready before starting to synchronise
-[ ] Use some kind of notification mechanism to watch for new clouds
 [ ] Investigate incremental sends vs batch sends (i.e. send object lists of 100 each to allow for some interleaving of requests)
 [ ] Don't drop connections to existing sync daemons whenever a syncd instance appears/disappears (bonjour)
 [ ] Move Bonjour code to libsaesu
