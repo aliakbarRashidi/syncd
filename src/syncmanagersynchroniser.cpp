@@ -30,17 +30,24 @@ SyncManagerSynchroniser::SyncManagerSynchroniser(QObject *parent, QTcpSocket *so
     , mBytesExpected(0)
 {
     if (socket) {
+        mIsOutgoing = false;
         mSocket = socket;
         mSocket->setParent(this); // make sure we take over
         startSync(); // already connected, so send introduction
     } else {
         mSocket = new QTcpSocket(this);
+        mIsOutgoing = true;
     }
 
     connect(mSocket, SIGNAL(connected()), SLOT(startSync()));
     connect(mSocket, SIGNAL(readyRead()), SLOT(onReadyRead()));
     connect(mSocket, SIGNAL(error(QAbstractSocket::SocketError)), SLOT(onError(QAbstractSocket::SocketError)));
     connect(mSocket, SIGNAL(disconnected()), SLOT(onDisconnected()));
+}
+
+bool SyncManagerSynchroniser::isOutgoing() const
+{
+    return mIsOutgoing;
 }
 
 void SyncManagerSynchroniser::sendCommand(quint8 token, const QByteArray &data)
@@ -54,6 +61,25 @@ void SyncManagerSynchroniser::sendCommand(quint8 token, const QByteArray &data)
 
 void SyncManagerSynchroniser::startSync()
 {
+    // as both sides advertise their presence, we end up with two connections: one outgoing from each side
+    // we can't stop those connections, because we don't know which interface the OS will route the connection
+    // from, so this is the only place we can know IPs.
+    //
+    // however, we also can't deal (in the sense of efficiency) with multiple connections performing
+    // the exact same synchronisation, so we need to force the peers to agree on a single connection.
+    // the easiest way to do this is to assume that the dominant connection will always be from the peer
+    // with the *LOWER* IP address.
+    const QHostAddress peerAddress = mSocket->peerAddress();
+    const QHostAddress localAddress = mSocket->localAddress();
+
+    sDebug() << "Got connected from " << peerAddress.toString() << " to " << localAddress.toString() << " direction is " << (isOutgoing() ? "outgoing" : "incoming");
+
+    if (QString::compare(peerAddress.toString(), localAddress.toString()) < 0 && !isOutgoing()) {
+        sDebug() << "Dropping redundant connection from " << peerAddress << " to " << localAddress;
+        mSocket->disconnectFromHost();
+        return;
+    }
+
      // TODO: listen for cloud add/remove
     QString databasePath;
     QCoreApplication *a = QCoreApplication::instance();
@@ -386,7 +412,13 @@ void SyncManagerSynchroniser::connectToHost(const QHostAddress &address)
 void SyncManagerSynchroniser::onError(QAbstractSocket::SocketError error)
 {
     sDebug() << "Had an error: " << error;
-    deleteLater();
+
+    if (error == QAbstractSocket::RemoteHostClosedError && isOutgoing()) {
+        // try reconnect
+        mSocket->connectToHost(mSocket->peerAddress(), 1337);
+    } else {
+        deleteLater();
+    }
 }
 
 void SyncManagerSynchroniser::onDisconnected()

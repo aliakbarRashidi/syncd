@@ -26,6 +26,8 @@ class SyncManagerSynchroniser : public QObject
 public:
     explicit SyncManagerSynchroniser(QObject *parent, QTcpSocket *socket = 0);
 
+    bool isOutgoing() const;
+
 public slots:
     void connectToHost(const QHostAddress &address);
     void processData(const QByteArray &bytes);
@@ -50,6 +52,7 @@ private slots:
 private:
     QTcpSocket *mSocket;
     quint32 mBytesExpected;
+    bool mIsOutgoing;
 
     // expected handshake proceedure:
     // exchange auth (TBD)
