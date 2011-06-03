@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QCoreApplication>
 #include <QDesktopServices>
+#include <QtEndian>
 
 // Saesu
 #include <sobject.h>
@@ -52,9 +53,8 @@ bool SyncManagerSynchroniser::isOutgoing() const
 
 void SyncManagerSynchroniser::sendCommand(quint8 token, const QByteArray &data)
 {
-    // TODO: endianness?
-    quint32 length = (quint32)data.length() + 1;
-    mSocket->write(reinterpret_cast<char *>(&length), sizeof(quint32)); // TODO: endianness
+    quint32 length = qToBigEndian<quint32>((quint32)data.length() + 1);
+    mSocket->write(reinterpret_cast<char *>(&length), sizeof(quint32));
     mSocket->write(reinterpret_cast<char *>(&token), sizeof(quint8));
     mSocket->write(data);
 }
@@ -99,7 +99,7 @@ void SyncManagerSynchroniser::startSync()
         // send current time
         QByteArray data;
         QDataStream stream(&data, QIODevice::WriteOnly);
-        stream << (qint64)QDateTime::currentMSecsSinceEpoch(); // TODO: endianness
+        stream << (qint64)QDateTime::currentMSecsSinceEpoch();
 
         sendCommand(CurrentTimeCommand, data);
     }
@@ -160,6 +160,7 @@ void SyncManagerSynchroniser::onReadyRead()
         if (mBytesExpected == 0) {
             // read header
             mSocket->read(reinterpret_cast<char *>(&mBytesExpected), sizeof(mBytesExpected));
+            mBytesExpected = qFromBigEndian<quint32>(mBytesExpected);
         }
 
         if (mSocket->bytesAvailable() < mBytesExpected)
