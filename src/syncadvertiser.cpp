@@ -26,7 +26,25 @@
 SyncAdvertiser::SyncAdvertiser(QObject *parent)
     : QObject(parent)
 {
-    int portNo = qrand() % ((65535 + 1) - 49152) + 49152; // ephemeral port range
+    connect(&mServer, SIGNAL(newConnection()), SLOT(onNewConnection()));
+
+    int portNo;
+
+    forever {
+        portNo = qrand() % ((65535 + 1) - 49152) + 49152; // ephemeral port range
+
+        if (!mServer.listen(QHostAddress::Any, portNo)) {
+            if (mServer.serverError() == QAbstractSocket::AddressInUseError)
+                continue;
+
+            sWarning() << "Couldn't bind TCP; error: " << mServer.errorString();
+            exit(1);
+        }
+
+        sDebug() << "Bound to port " << portNo;
+        break;
+    }
+
     BonjourServiceRegister *bonjourRegister = new BonjourServiceRegister(this);
     bonjourRegister->registerService(BonjourRecord(QString("Saesu Synchronisation on %1").arg(QHostInfo::localHostName()),
                                             QLatin1String("_saesu._tcp"),
@@ -40,16 +58,6 @@ SyncAdvertiser::SyncAdvertiser(QObject *parent)
     mBonjourResolver = new BonjourServiceResolver(this);
     connect(mBonjourResolver, SIGNAL(bonjourRecordResolved(const QHostInfo &, int)),
             this, SLOT(connectToServer(const QHostInfo &, int)));
-
-    if (!mServer.listen(QHostAddress::Any, portNo)) {
-        sWarning() << "Couldn't bind TCP; presuming another instance running";
-        exit(1);
-    }
-
-    sDebug() << "Bound to port " << portNo;
-
-    // and open for business
-    connect(&mServer, SIGNAL(newConnection()), SLOT(onNewConnection()));
 }
 
 void SyncAdvertiser::updateRecords(const QList<BonjourRecord> &list)
