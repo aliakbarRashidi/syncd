@@ -42,7 +42,7 @@ SyncAdvertiser::SyncAdvertiser(QObject *parent)
             this, SLOT(connectToServer(const QHostInfo &, int)));
 
     if (!mServer.listen(QHostAddress::Any, portNo)) {
-        sDebug() << "Couldn't bind TCP; presuming another instance running";
+        sWarning() << "Couldn't bind TCP; presuming another instance running";
         exit(1);
     }
 
@@ -73,7 +73,6 @@ void SyncAdvertiser::connectToServer(const QHostInfo &address, int port)
     foreach (const QHostAddress &addr, iface.allAddresses()) {
         foreach (const QHostAddress &remoteAddr, address.addresses()) {
             if (remoteAddr == addr) {
-                sDebug() << "Dropping broadcast from myself (" << remoteAddr << ")";
                 return;
             }
         }
@@ -83,20 +82,21 @@ void SyncAdvertiser::connectToServer(const QHostInfo &address, int port)
     // TODO: this breaks ipv6 until we do
     foreach (const QHostAddress &remoteAddr, address.addresses()) {
         if (remoteAddr.protocol() == QAbstractSocket::IPv4Protocol) {
-            qDebug() << address.addresses() << " said hello, connecting back...";
+            sDebug() << remoteAddr << " said hello, connecting back...";
             SyncManagerSynchroniser *syncSocket = new SyncManagerSynchroniser(this);
             connect(syncSocket, SIGNAL(destroyed()), SLOT(onDisconnected()));
             syncSocket->connectToHost(remoteAddr, port);
             mSyncers.append(syncSocket);
+            break;
         }
     }
 }
 
 void SyncAdvertiser::onNewConnection()
 {
-    sDebug() << "Got a new connection!";
     while (mServer.hasPendingConnections()) {
         QTcpSocket *socket = mServer.nextPendingConnection();
+        sDebug() << "Got a new connection from " << socket->peerAddress();
         SyncManagerSynchroniser *syncSocket = new SyncManagerSynchroniser(this, socket);
         connect(syncSocket, SIGNAL(destroyed()), SLOT(onDisconnected()));
         mSyncers.append(syncSocket);

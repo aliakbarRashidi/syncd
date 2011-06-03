@@ -70,10 +70,8 @@ void BonjourServiceResolver::resolveBonjourRecord(const BonjourRecord &record)
 {
     mBonjourRecords.append(record);
 
-    if (dnssref) {
-        qDebug("resolve in process, aborting");
+    if (dnssref)
         return;
-    }
 
     resolveNextRecord();
 }
