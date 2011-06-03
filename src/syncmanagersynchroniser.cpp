@@ -403,10 +403,10 @@ void SyncManagerSynchroniser::processData(const QByteArray &bytes)
     }
 }
 
-void SyncManagerSynchroniser::connectToHost(const QHostAddress &address)
+void SyncManagerSynchroniser::connectToHost(const QHostAddress &address, int port)
 {
     sDebug() << "Connecting to " << address;
-    mSocket->connectToHost(address, 1337);
+    mSocket->connectToHost(address, port);
 }
 
 void SyncManagerSynchroniser::onError(QAbstractSocket::SocketError error)
@@ -415,7 +415,7 @@ void SyncManagerSynchroniser::onError(QAbstractSocket::SocketError error)
 
     if (error == QAbstractSocket::RemoteHostClosedError && isOutgoing()) {
         // try reconnect
-        mSocket->connectToHost(mSocket->peerAddress(), 1337);
+        mSocket->connectToHost(mSocket->peerAddress(), mSocket->peerPort());
     } else {
         deleteLater();
     }

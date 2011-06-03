@@ -29,7 +29,7 @@ public:
     bool isOutgoing() const;
 
 public slots:
-    void connectToHost(const QHostAddress &address);
+    void connectToHost(const QHostAddress &address, int port);
     void processData(const QByteArray &bytes);
     void disconnectFromHost() { mSocket->disconnectFromHost(); }
 

@@ -21,12 +21,18 @@
 #include "syncmanagersynchroniser.h"
 #include "bonjourservicebrowser.h"
 #include "bonjourserviceresolver.h"
+#include "bonjourserviceregister.h"
 
 SyncAdvertiser::SyncAdvertiser(QObject *parent)
     : QObject(parent)
 {
-    BonjourServiceBrowser *bonjourBrowser = new BonjourServiceBrowser(this);
+    int portNo = qrand() % ((65535 + 1) - 49152) + 49152; // ephemeral port range
+    BonjourServiceRegister *bonjourRegister = new BonjourServiceRegister(this);
+    bonjourRegister->registerService(BonjourRecord(QString("Saesu Synchronisation on %1").arg(QHostInfo::localHostName()),
+                                            QLatin1String("_saesu._tcp"),
+                                            QString()), portNo);
 
+    BonjourServiceBrowser *bonjourBrowser = new BonjourServiceBrowser(this);
     connect(bonjourBrowser, SIGNAL(currentBonjourRecordsChanged(const QList<BonjourRecord> &)),
             this, SLOT(updateRecords(const QList<BonjourRecord> &)));
     bonjourBrowser->browseForServiceType(QLatin1String("_saesu._tcp"));
@@ -35,10 +41,12 @@ SyncAdvertiser::SyncAdvertiser(QObject *parent)
     connect(mBonjourResolver, SIGNAL(bonjourRecordResolved(const QHostInfo &, int)),
             this, SLOT(connectToServer(const QHostInfo &, int)));
 
-    if (!mServer.listen(QHostAddress::Any, 1337)) {
-        qDebug("Couldn't bind TCP; presuming another instance running");
+    if (!mServer.listen(QHostAddress::Any, portNo)) {
+        sDebug() << "Couldn't bind TCP; presuming another instance running";
         exit(1);
     }
+
+    sDebug() << "Bound to port " << portNo;
 
     // and open for business
     connect(&mServer, SIGNAL(newConnection()), SLOT(onNewConnection()));
@@ -78,7 +86,7 @@ void SyncAdvertiser::connectToServer(const QHostInfo &address, int port)
             qDebug() << address.addresses() << " said hello, connecting back...";
             SyncManagerSynchroniser *syncSocket = new SyncManagerSynchroniser(this);
             connect(syncSocket, SIGNAL(destroyed()), SLOT(onDisconnected()));
-            syncSocket->connectToHost(remoteAddr);
+            syncSocket->connectToHost(remoteAddr, port);
             mSyncers.append(syncSocket);
         }
     }
