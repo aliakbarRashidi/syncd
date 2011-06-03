@@ -72,10 +72,10 @@ void SyncManagerSynchroniser::startSync()
     const QHostAddress peerAddress = mSocket->peerAddress();
     const QHostAddress localAddress = mSocket->localAddress();
 
-    sDebug() << "Got connected from " << peerAddress.toString() << " to " << localAddress.toString() << " direction is " << (isOutgoing() ? "outgoing" : "incoming");
+    sDebug() << (void*)this << "Got connected from " << peerAddress.toString() << " to " << localAddress.toString() << " direction is " << (isOutgoing() ? "outgoing" : "incoming");
 
     if (QString::compare(peerAddress.toString(), localAddress.toString()) < 0 && !isOutgoing()) {
-        sDebug() << "Dropping redundant connection from " << peerAddress << " to " << localAddress;
+        sDebug() << (void*)this << "Dropping redundant connection from " << peerAddress << " to " << localAddress;
         mSocket->disconnectFromHost();
         return;
     }
@@ -120,7 +120,7 @@ void SyncManagerSynchroniser::startSync()
 
 void SyncManagerSynchroniser::sendDeleteList(const QString &managerName, const QList<SObjectLocalId> &ids)
 {
-    sDebug() << "Sending delete list of " << ids.count() << " items";
+    sDebug() << (void*)this << "Sending delete list of " << ids.count() << " items";
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
     stream << managerName;
@@ -135,7 +135,7 @@ void SyncManagerSynchroniser::sendDeleteList(const QString &managerName, const Q
 
 void SyncManagerSynchroniser::sendObjectList(const QString &cloudName, const QList<SObject> &objects)
 {
-    sDebug() << "Sending object list of " << objects.count() << " items";
+    sDebug() << (void*)this << "Sending object list of " << objects.count() << " items";
 
     if (!objects.count())
         return;
@@ -180,12 +180,11 @@ void SyncManagerSynchroniser::processDeleteList(QDataStream &stream)
     stream >> cloudName;
 
     // sending a message, find message
-    sDebug() << "Processing a delete list";
 
     quint32 itemCount;
     stream >> itemCount;
 
-    sDebug() << itemCount << " items";
+    sDebug() << (void*)this << "Processing a delete list of " << itemCount << " items";
     QList<SObjectLocalId> ids;
 
     for (quint32 i = 0; i < itemCount; ++i) {
@@ -204,13 +203,12 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
     stream >> cloudName;
 
     // sending a message, find message
-    sDebug() << "Processing an object list";
     QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objectHash();
 
     quint32 itemCount;
     stream >> itemCount;
 
-    sDebug() << itemCount << " items";
+    sDebug() << (void*)this << "Processing an object list of " << itemCount << " items";
 
     for (quint32 i = 0; i < itemCount; ++i) {
         SObjectLocalId uuid;
@@ -225,14 +223,14 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
 
         QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
         if (cit == objects.end()) {
-            sDebug() << "Item " << uuid << " not found; requesting";
+            sDebug() << (void*)this << "Item " << uuid << " not found; requesting";
             requestItem = true;
         } else {
             const SObject &obj = *cit;
 
             if (obj.hash() != itemHash ||
                 obj.lastSaved() != itemTS) {
-                sDebug() << "Modified item " << uuid << " detected, requesting";
+                sDebug() << (void*)this << "Modified item " << uuid << " detected, requesting";
                 requestItem = true;
             }
         }
@@ -259,11 +257,11 @@ void SyncManagerSynchroniser::processObjectRequest(QDataStream &stream)
     QHash<SObjectLocalId, SObject> objects = SyncManager::instance(cloudName)->objectHash();
     QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
     if (cit == objects.end()) {
-        sDebug() << "Recieved a request for a nonexistant item! UUID: " << uuid;
+        sDebug() << (void*)this << "Recieved a request for a nonexistant item! UUID: " << uuid;
         return;
     }
 
-    sDebug() << "Object request for " << uuid << " recieved; sending";
+    sDebug() << (void*)this << "Object request for " << uuid << " recieved; sending";
 
     QByteArray sendingData;
     QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
@@ -289,7 +287,7 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
     stream >> remoteItem;
     
     if (SyncManager::instance(cloudName)->isRemoved(uuid)) {
-        sDebug() << "Ignoring deleted UUID " << uuid;
+        sDebug() << (void*)this << "Ignoring deleted UUID " << uuid;
         return;
     }
 
@@ -298,27 +296,27 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
     bool saveItem = false;
 
     if (cit == objects.end()) {
-        sDebug() << "Inserting an item I don't have";
+        sDebug() << (void*)this << "Inserting an item I don't have";
         saveItem = true;
     } else {
         const SObject &localItem = *cit;
         
-        sDebug() << "Existing object " << uuid;
-        sDebug() << "   LOCAL TS: " << localItem.lastSaved();
-        sDebug() << "   REMOTE TS: " << remoteItem.lastSaved();
+        sDebug() << (void*)this << "Existing object " << uuid;
+        sDebug() << (void*)this << "   LOCAL TS: " << localItem.lastSaved();
+        sDebug() << (void*)this << "   REMOTE TS: " << remoteItem.lastSaved();
 
         // find out which is the newer item
         if (localItem.lastSaved() > remoteItem.lastSaved()) {
             // ours is newer, ignore theirs
-            sDebug() << "For modified item " << uuid << ", using ours on TS";
+            sDebug() << (void*)this << "For modified item " << uuid << ", using ours on TS";
         } else if (localItem.lastSaved() == remoteItem.lastSaved()) {
             // identical, resort to alphabetically superior SHA to force a compromise
-            sDebug() << "TS equal; hash comparison needed";
-            sDebug() << "  LOCAL HASH: " << localItem.hash();
-            sDebug() << "  REMOTE HASH: " << remoteItem.hash();
+            sDebug() << (void*)this << "TS equal; hash comparison needed";
+            sDebug() << (void*)this << "  LOCAL HASH: " << localItem.hash();
+            sDebug() << (void*)this << "  REMOTE HASH: " << remoteItem.hash();
             if (localItem.hash() > remoteItem.hash()) {
                 // ours is alphabetically superior, ignore theirs
-                sDebug() << "For modified item " << uuid << " using ours on hash";
+                sDebug() << (void*)this << "For modified item " << uuid << " using ours on hash";
             } else if (localItem.hash() == remoteItem.hash()) {
                 // in the case of two connected clients, A and B,
                 // A may add an item, send a change notification (via object list) to B
@@ -337,12 +335,12 @@ void SyncManagerSynchroniser::processObjectReply(QDataStream &stream)
                 // (and if not, use the alphabetically superior like other parts of collision resolution)
             } else if (localItem.hash() < remoteItem.hash()) {
                 // take theirs
-                sDebug() << "For modified item " << uuid << " using theirs on hash";
+                sDebug() << (void*)this << "For modified item " << uuid << " using theirs on hash";
                 saveItem = true;
             }
         } else if (localItem.lastSaved() < remoteItem.lastSaved()) {
             // theirs wins
-            sDebug() << "For modified item " << uuid << " using theirs on TS";
+            sDebug() << (void*)this << "For modified item " << uuid << " using theirs on TS";
             saveItem = true;
         }
     }
@@ -371,7 +369,7 @@ void SyncManagerSynchroniser::processCurrentTime(QDataStream &stream)
         mSocket->disconnectFromHost();
         return;
     } else if (delta > 0) {
-        sDebug() << "Synchronisation delta with " << mSocket->peerAddress() << " is " << delta;
+        sDebug() << (void*)this << "Synchronisation delta with " << mSocket->peerAddress() << " is " << delta;
     }
 }
 
@@ -405,13 +403,13 @@ void SyncManagerSynchroniser::processData(const QByteArray &bytes)
 
 void SyncManagerSynchroniser::connectToHost(const QHostAddress &address, int port)
 {
-    sDebug() << "Connecting to " << address;
+    sDebug() << (void*)this << "Connecting to " << address;
     mSocket->connectToHost(address, port);
 }
 
 void SyncManagerSynchroniser::onError(QAbstractSocket::SocketError error)
 {
-    sDebug() << "Had an error: " << error;
+    sDebug() << (void*)this << "Had an error: " << error;
 
     if (error == QAbstractSocket::RemoteHostClosedError && isOutgoing()) {
         // try reconnect
@@ -423,7 +421,7 @@ void SyncManagerSynchroniser::onError(QAbstractSocket::SocketError error)
 
 void SyncManagerSynchroniser::onDisconnected()
 {
-    sDebug() << "Connection closed";
+    sDebug() << (void*)this << "Connection closed";
     deleteLater();
 }
 
