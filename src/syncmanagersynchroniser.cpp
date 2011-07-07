@@ -618,7 +618,7 @@ void SyncManagerSynchroniser::processFileBlockRequest(QDataStream &stream)
         QDataStream stream(&data, QIODevice::WriteOnly);
         stream << theirFileName;
         stream << theirBlockNumber;
-        stream << QByteArray(data, (int)blockSize);
+        stream << QByteArray(data, (int)readBlockSize);
 
         sendCommand(FileBlockReplyCommand, data);
     }
