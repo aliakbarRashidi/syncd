@@ -5,6 +5,7 @@ v0.3
 [x] Fix hardcoded port, use a random port (thanks, zeroconf)
 
 future
+[ ] listen for cloud add/remove
 [ ] Don't load all objects on startup
 [ ] Wait for clouds to be ready before starting to synchronise
 [ ] Investigate incremental sends vs batch sends (i.e. send object lists of 100 each to allow for some interleaving of requests)
