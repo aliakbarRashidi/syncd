@@ -618,33 +618,10 @@ void SyncManagerSynchroniser::processFileBlockRequest(QDataStream &stream)
         QDataStream stream(&data, QIODevice::WriteOnly);
         stream << theirFileName;
         stream << theirBlockNumber;
-        stream << QByteArray(data, (int)readBlockSize);
+        stream << QByteArray(buf, (int)readBlockSize);
 
         sendCommand(FileBlockReplyCommand, data);
     }
-/*
-        FileHashReplyCommand = 0x7,
-
-        // Request the given block number.
-        // The peer will then reply with a FileBlockReplyCommand for this block.
-        //
-        // TBD: how to point out exactly where this file is?
-        //
-        // QString: <fileName>
-        // quint64: blockNumber
-        FileBlockRequestCommand = 0x8,
-
-        // FileBlockReplyCommand is sent in response to FileBlockRequestCommand.
-        // It contains a given block of a file.
-        //
-        // TBD: how to point out exactly where this file is?
-        //
-        // QString: <fileName>
-        // quint64: blockNumber
-        // QByteArray: block
-        FileBlockReplyCommand = 0x10
-*/
-
 }
 
 void SyncManagerSynchroniser::processFileBlockReply(QDataStream &stream)
