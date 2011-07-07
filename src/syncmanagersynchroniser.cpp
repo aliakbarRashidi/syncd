@@ -538,7 +538,21 @@ void SyncManagerSynchroniser::processFileHashReply(QDataStream &stream)
     char buf[blockSize + 1]; // + 1 to not overwrite the block
     *buf = 0;
     QFile f(theirFileName);
-    f.open(QIODevice::ReadOnly);
+    if (!f.open(QIODevice::ReadOnly)) {
+        // couldn't open file! probably doesn't exist
+        // TODO: proper error checking would be grand
+        sDebug() << "Requesting chunk " << theirBlockNumber << "for presumably nonexistent file " << theirFileName;
+        
+        {
+            // send file overview
+            QByteArray data;
+            QDataStream stream(&data, QIODevice::WriteOnly);
+            stream << theirFileName;
+            stream << theirBlockNumber;
+
+            sendCommand(FileBlockRequestCommand, data);
+        }
+    }
     f.seek(blockSize * theirBlockNumber);
 
     QCryptographicHash blockHash(QCryptographicHash::Sha1);
