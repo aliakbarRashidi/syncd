@@ -13,6 +13,7 @@
 #include <QDateTime>
 
 #include "syncadvertiser.h"
+#include "filewatcher.h"
 
 int main(int argc, char **argv)
 {
@@ -23,6 +24,8 @@ int main(int argc, char **argv)
     a.setOrganizationName(QLatin1String("saesu"));
     a.setApplicationName(QLatin1String("syncd"));
 
-    SyncAdvertiser storageAdvertiser;
-    a.exec();
+//    SyncAdvertiser storageAdvertiser;
+//    a.exec();
+
+    FileWatcher::instance();
 }
