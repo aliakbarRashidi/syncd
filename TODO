@@ -5,6 +5,8 @@ v0.3
 [x] Fix hardcoded port, use a random port (thanks, zeroconf)
 
 future
+[ ] cloud-level hash (instead of sending object list unnecessarily,
+    only exchange list/delete list if hash doesn't match)
 [ ] listen for cloud add/remove
 [ ] Don't load all objects on startup
 [ ] Wait for clouds to be ready before starting to synchronise
