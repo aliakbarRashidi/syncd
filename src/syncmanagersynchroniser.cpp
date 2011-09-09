@@ -118,7 +118,6 @@ void SyncManagerSynchroniser::startSync()
                 SIGNAL(objectsDeleted(QString,QList<SObjectLocalId>)),
                 SLOT(sendDeleteList(QString,QList<SObjectLocalId>)),
                 Qt::UniqueConnection);
-        sendDeleteList(database, SyncManager::instance(database)->deleteList());
         sendObjectList(database, SyncManager::instance(database)->objects());
     }
 }
@@ -227,6 +226,13 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
 
         bool requestItem = false;
 
+        // TODO: batch requests in groups
+        if (SyncManager::instance(cloudName)->isRemoved(uuid)) {
+            sDebug() << (void*)this << "Ignoring deleted UUID " << uuid;
+            sendDeleteList(cloudName, QList<SObjectLocalId>() << uuid);
+            continue;
+        }
+
         QHash<SObjectLocalId, SObject>::ConstIterator cit = objects.find(uuid);
         if (cit == objects.end()) {
             sDebug() << (void*)this << "Item " << uuid << " not found; requesting";
@@ -241,6 +247,7 @@ void SyncManagerSynchroniser::processObjectList(QDataStream &stream)
             }
         }
 
+        // TODO: batch requests in groups
         if (requestItem) {
             QByteArray sendingData;
             QDataStream sendingStream(&sendingData, QIODevice::WriteOnly);
