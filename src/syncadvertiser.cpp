@@ -17,6 +17,7 @@
 // Qt
 #include <QCoreApplication>
 #include <QNetworkInterface>
+#include <QStringList>
 
 // Saesu
 #include "sglobal.h"
@@ -30,6 +31,7 @@
 
 SyncAdvertiser::SyncAdvertiser(QObject *parent)
     : QObject(parent)
+    , mPeerAdvertiser("saesu://peer-model")
 {
     connect(&mServer, SIGNAL(newConnection()), SLOT(onNewConnection()));
 
@@ -74,9 +76,20 @@ void SyncAdvertiser::updateRecords(const QList<BonjourRecord> &list)
         syncer->deleteLater();
     }
 
+    QStringList peerNames;
+
     foreach (const BonjourRecord &record, list) {
         mBonjourResolver->resolveBonjourRecord(record);
+        peerNames.append(record.serviceName);
     }
+
+    sDebug() << "Got peers: " << peerNames;
+
+    QByteArray data;
+    QDataStream ds(&data, QIODevice::WriteOnly);
+    ds << peerNames;
+
+    mPeerAdvertiser.sendMessage("peersAvailable(QStringList)", data);
 }
 
 void SyncAdvertiser::connectToServer(const QHostInfo &address, int port)
