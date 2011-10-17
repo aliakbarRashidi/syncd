@@ -21,9 +21,36 @@
 #include <QFileSystemWatcher>
 #include <QObject>
 #include <QString>
+#include <QFileInfo>
 
 // saesu
 #include "sglobal.h"
+
+
+struct CachedFileInfo
+{
+    QString fileName;
+    QDateTime lastModified;
+
+    CachedFileInfo &operator=(const QFileInfo &fileInfo)
+    {
+        fileName = fileInfo.fileName();
+        lastModified = fileInfo.lastModified();
+        return *this;
+    }
+
+    bool operator!=(const QFileInfo &fileInfo) const
+    {
+        return lastModified != fileInfo.lastModified() ||
+                fileName != fileInfo.fileName();
+    }
+
+    bool operator==(const QFileInfo &fileInfo) const
+    {
+        return lastModified == fileInfo.lastModified() &&
+               fileName == fileInfo.fileName();
+    }
+};
 
 class FileWatcher : public QObject
 {
@@ -35,6 +62,9 @@ public:
 
 private:
     void watchDirectoryTree(const QString &path);
+
+    // QString dirPath, list of info on files in the dir
+    QHash<QString, QList<CachedFileInfo> > mDirectoryContentsHash;
 
     QFileSystemWatcher mWatcher;
 };

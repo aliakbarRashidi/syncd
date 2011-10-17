@@ -18,6 +18,7 @@
 #include <QDateTime>
 
 #include "syncadvertiser.h"
+#include "filewatcher.h"
 
 int main(int argc, char **argv)
 {

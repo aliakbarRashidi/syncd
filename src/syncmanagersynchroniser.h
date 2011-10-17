@@ -44,6 +44,11 @@ public slots:
     void processObjectList(QDataStream &stream);
     void processObjectRequest(QDataStream &stream);
     void processObjectReply(QDataStream &stream);
+    void processFileInfo(QDataStream &stream);
+    void processFileHashRequest(QDataStream &stream);
+    void processFileHashReply(QDataStream &stream);
+    void processFileBlockRequest(QDataStream &stream);
+    void processFileBlockReply(QDataStream &stream);
 
 private slots:
     void onReadyRead();
@@ -96,7 +101,64 @@ private:
         // used to inform the other side as to what the time is from our point of view
         // if the time delta is excessive, synchronisation will be halted
         // qint64: milliseconds since the epoch
-        CurrentTimeCommand = 0x4
+        CurrentTimeCommand = 0x4,
+
+        // Gives information about a file to a peer.
+        // Peers may then issue FileHashRequestCommand if their version of the
+        // file doesn't match.
+        //
+        // TBD: how to point out exactly where this file is?
+        //
+        // QString: <fileName>
+        // quint64: fileSize
+        // QByteArray: hash of the file, in sha-1
+        FileInfoCommand = 0x5,
+
+        // Request the hash information for a given file.
+        //
+        // The recieving peer then sends hash information for each block of the
+        // requested file, using FileHashReplyCommand for each block
+        //
+        // TBD: how to point out exactly where this file is?
+        //
+        // QString: <fileName>
+        FileHashRequestCommand = 0x6,
+
+        // Many of these may be sent in response to a single FileHashRequestCommand.
+        //
+        // One is sent for each 'block' of a file. A block is 4096 bytes of a
+        // file, and a 'block number' indicates which block is being referred
+        // to, starting at 0. Thus, block 4 would be 4 * 4096 = 16384 bytes into
+        // a file, but is actually the 5th 'block'.
+        //
+        // If the peer does not have a matching hash for this block, it may
+        // request this block using FileBlockRequestCommand.
+        //
+        // TBD: how to point out exactly where this file is?
+        //
+        // QString: <fileName>
+        // quint64: blockNumber
+        // QByteArray: hash of the block number
+        FileHashReplyCommand = 0x7,
+
+        // Request the given block number.
+        // The peer will then reply with a FileBlockReplyCommand for this block.
+        //
+        // TBD: how to point out exactly where this file is?
+        //
+        // QString: <fileName>
+        // quint64: blockNumber
+        FileBlockRequestCommand = 0x8,
+
+        // FileBlockReplyCommand is sent in response to FileBlockRequestCommand.
+        // It contains a given block of a file.
+        //
+        // TBD: how to point out exactly where this file is?
+        //
+        // QString: <fileName>
+        // quint64: blockNumber
+        // QByteArray: block
+        FileBlockReplyCommand = 0x10
     };
 };
 

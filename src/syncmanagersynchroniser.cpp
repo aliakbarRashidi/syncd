@@ -21,6 +21,7 @@
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QtEndian>
+#include <QCryptographicHash>
 
 // Saesu
 #include <sobject.h>
@@ -30,6 +31,8 @@
 // Us
 #include "syncmanager.h"
 #include "syncmanagersynchroniser.h"
+
+static const qint64 blockSize = 4096;
 
 SyncManagerSynchroniser::SyncManagerSynchroniser(QObject *parent, QTcpSocket *socket)
     : QObject(parent)
@@ -84,6 +87,54 @@ void SyncManagerSynchroniser::startSync()
         mSocket->disconnectFromHost();
         return;
     }
+
+    sDebug() << "Opening file";
+    QCryptographicHash fileHash(QCryptographicHash::Sha1);
+    char buf[blockSize + 1]; // + 1 to not overwrite the block
+    *buf = 0;
+    bool error = false;
+    QList<QByteArray> blockHashes;
+    QFile f("music.mp3");
+
+    f.open(QIODevice::ReadOnly);
+
+    while (!f.atEnd()) {
+        QCryptographicHash blockHash(QCryptographicHash::Sha1);
+        qint64 readBlockSize = f.read(buf, blockSize);
+
+        if (readBlockSize == -1) {
+            sDebug() << "Error!";
+            error = true;
+            break;
+        } else if (readBlockSize < blockSize) {
+            sDebug() << "Didn't read a full block, near EOF?";
+            sDebug() << "Read a block of " << readBlockSize << " bytes";
+        }
+
+        blockHash.addData(buf, readBlockSize);
+        fileHash.addData(buf, readBlockSize);
+        blockHashes.append(blockHash.result());
+    }
+
+    // TODO: check for empty file
+    if (!error) {
+        sDebug() << "No error! :)";
+        sDebug() << "File contains " << blockHashes.count() << " hashes";
+        sDebug() << "File hash is " << fileHash.result().toHex();
+
+        {
+            // send file overview
+            QByteArray data;
+            QDataStream stream(&data, QIODevice::WriteOnly);
+            stream << QString("music.mp3");
+            stream << (quint64)f.size();
+            stream << fileHash.result();
+
+            sendCommand(FileInfoCommand, data);
+        }
+    }
+
+    sDebug() << "Finished reading file";
 
      // TODO: listen for cloud add/remove
     QString databasePath;
@@ -386,6 +437,224 @@ void SyncManagerSynchroniser::processCurrentTime(QDataStream &stream)
     }
 }
 
+void SyncManagerSynchroniser::processFileInfo(QDataStream &stream)
+{
+    QString theirFileName;
+    quint64 theirFileSize;
+    QByteArray theirFileHash;
+
+    stream >> theirFileName;
+    stream >> theirFileSize;
+    stream >> theirFileHash;
+
+    sDebug() << "Got a file info for: " << theirFileName << "; file is " <<
+        theirFileSize << " bytes, hash is " << theirFileHash.toHex();
+
+    // TODO: cache hashes for blocks and files
+    char buf[blockSize + 1]; // + 1 to not overwrite the block
+    *buf = 0;
+    QCryptographicHash fileHash(QCryptographicHash::Sha1);
+    QFile f(theirFileName);
+    f.open(QIODevice::ReadOnly);
+
+    while (!f.atEnd()) {
+        qint64 readBlockSize = f.read(buf, blockSize);
+
+        if (readBlockSize == -1) {
+            sDebug() << "Error!";
+            break;
+        } else if (readBlockSize < blockSize) {
+            sDebug() << "Didn't read a full block, near EOF?";
+            sDebug() << "Read a block of " << readBlockSize << " bytes";
+        }
+
+        fileHash.addData(buf, readBlockSize);
+    }
+
+    if (theirFileSize != f.size() &&
+        theirFileHash != fileHash.result()) {
+        sDebug() << "File differs: " << theirFileName;
+        sDebug() << "   OUR SIZE: " << f.size() << "; theirs: " << theirFileSize;
+        sDebug() << "   OUR HASH: " << fileHash.result().toHex() << "; theirs: " << theirFileHash;
+
+        {
+            // send hash request
+            QByteArray data;
+            QDataStream stream(&data, QIODevice::WriteOnly);
+            stream << QString(theirFileName);
+
+            sendCommand(FileHashRequestCommand, data);
+        }
+    }
+}
+
+void SyncManagerSynchroniser::processFileHashRequest(QDataStream &stream)
+{
+    QString theirFileName;
+    stream >> theirFileName;
+
+    sDebug() << "Recieved a hash request for " << theirFileName;
+    char buf[blockSize + 1]; // + 1 to not overwrite the block
+    *buf = 0;
+    bool error = false;
+    QFile f(theirFileName);
+    quint64 blockId = 0;
+
+    f.open(QIODevice::ReadOnly);
+
+    while (!f.atEnd()) {
+        QCryptographicHash blockHash(QCryptographicHash::Sha1);
+        qint64 readBlockSize = f.read(buf, blockSize);
+
+        if (readBlockSize == -1) {
+            sDebug() << "Error!";
+            error = true;
+            break;
+        } else if (readBlockSize < blockSize) {
+            sDebug() << "Didn't read a full block, near EOF?";
+            sDebug() << "Read a block of " << readBlockSize << " bytes";
+        }
+
+        blockHash.addData(buf, readBlockSize);
+
+        {
+            // send file overview
+            QByteArray data;
+            QDataStream stream(&data, QIODevice::WriteOnly);
+            stream << theirFileName;
+            stream << blockId;
+            stream << blockHash.result();
+
+            sendCommand(FileHashReplyCommand, data);
+        }
+
+        blockId++;
+    }
+
+    sDebug() << "Finished reading file";
+}
+
+void SyncManagerSynchroniser::processFileHashReply(QDataStream &stream)
+{
+    QString theirFileName;
+    quint64 theirBlockNumber;
+    QByteArray theirBlockHash;
+
+    stream >> theirFileName;
+    stream >> theirBlockNumber;
+    stream >> theirBlockHash;
+
+    sDebug() << "Got a hash reply for " << theirFileName << " block number "
+             <<  theirBlockNumber << " with hash " << theirBlockHash.toHex();
+
+    char buf[blockSize + 1]; // + 1 to not overwrite the block
+    *buf = 0;
+    QFile f(theirFileName);
+    if (!f.open(QIODevice::ReadOnly)) {
+        // couldn't open file! probably doesn't exist
+        // TODO: proper error checking would be grand
+        sDebug() << "Requesting chunk " << theirBlockNumber << "for presumably nonexistent file " << theirFileName;
+        
+        {
+            // send file overview
+            QByteArray data;
+            QDataStream stream(&data, QIODevice::WriteOnly);
+            stream << theirFileName;
+            stream << theirBlockNumber;
+
+            sendCommand(FileBlockRequestCommand, data);
+        }
+    }
+    f.seek(blockSize * theirBlockNumber);
+
+    QCryptographicHash blockHash(QCryptographicHash::Sha1);
+    qint64 readBlockSize = f.read(buf, blockSize);
+
+    if (readBlockSize == -1) {
+        sDebug() << "Error!";
+        return;
+    } else if (readBlockSize < blockSize) {
+        sDebug() << "Didn't read a full block, near EOF?";
+        sDebug() << "Read a block of " << readBlockSize << " bytes";
+    }
+
+    blockHash.addData(buf, readBlockSize);
+
+    if (blockHash.result() != theirBlockHash) {
+        sDebug() << "Differing block hash for " << theirFileName << " id " << theirBlockNumber;
+        sDebug() << "   THEIRS: " << theirBlockHash.toHex();
+        sDebug() << "   OURS: " << blockHash.result().toHex();
+
+        {
+            // send file overview
+            QByteArray data;
+            QDataStream stream(&data, QIODevice::WriteOnly);
+            stream << theirFileName;
+            stream << theirBlockNumber;
+
+            sendCommand(FileBlockRequestCommand, data);
+        }
+    }
+}
+
+void SyncManagerSynchroniser::processFileBlockRequest(QDataStream &stream)
+{
+    QString theirFileName;
+    quint64 theirBlockNumber;
+
+    stream >> theirFileName;
+    stream >> theirBlockNumber;
+
+    sDebug() << "Got a block request for " << theirFileName << " block number "
+             <<  theirBlockNumber;
+
+    char buf[blockSize + 1]; // + 1 to not overwrite the block
+    *buf = 0;
+    QFile f(theirFileName);
+    f.open(QIODevice::ReadOnly);
+    f.seek(blockSize * theirBlockNumber);
+
+    qint64 readBlockSize = f.read(buf, blockSize);
+
+    if (readBlockSize == -1) {
+        sDebug() << "Error!";
+        return;
+    } else if (readBlockSize < blockSize) {
+        sDebug() << "Didn't read a full block, near EOF?";
+        sDebug() << "Read a block of " << readBlockSize << " bytes";
+    }
+
+    {
+        // send file overview
+        QByteArray data;
+        QDataStream stream(&data, QIODevice::WriteOnly);
+        stream << theirFileName;
+        stream << theirBlockNumber;
+        stream << QByteArray(buf, (int)readBlockSize);
+
+        sendCommand(FileBlockReplyCommand, data);
+    }
+}
+
+void SyncManagerSynchroniser::processFileBlockReply(QDataStream &stream)
+{
+    QString theirFileName;
+    quint64 theirBlockNumber;
+    QByteArray theirBlock;
+
+    stream >> theirFileName;
+    stream >> theirBlockNumber;
+    stream >> theirBlock;
+
+    sDebug() << "Got a block for " << theirFileName << theirBlockNumber << " of size " << theirBlock.count() << " bytes";
+
+    QFile f(theirFileName);
+    f.open(QIODevice::ReadWrite);
+    f.seek(blockSize * theirBlockNumber);
+
+    f.write(theirBlock);
+}
+
 void SyncManagerSynchroniser::processData(const QByteArray &bytes)
 {
     QDataStream stream(bytes);
@@ -409,6 +678,20 @@ void SyncManagerSynchroniser::processData(const QByteArray &bytes)
         case ObjectReplyCommand:
             processObjectReply(stream);
             break;
+        case FileInfoCommand:
+            processFileInfo(stream);
+            break;
+        case FileHashRequestCommand:
+            processFileHashRequest(stream);
+            break;
+        case FileHashReplyCommand:
+            processFileHashReply(stream);
+            break;
+        case FileBlockRequestCommand:
+            processFileBlockRequest(stream);
+            break;
+        case FileBlockReplyCommand:
+            processFileBlockReply(stream);
         default:
             break;
     }

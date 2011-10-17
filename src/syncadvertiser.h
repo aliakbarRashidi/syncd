@@ -21,6 +21,8 @@
 #include <QTcpServer>
 #include <QHostInfo>
 
+#include <sipcchannel.h>
+
 #include "bonjourrecord.h"
 class BonjourServiceResolver;
 class SyncManagerSynchroniser;
@@ -41,6 +43,7 @@ private:
     BonjourServiceResolver *mBonjourResolver;
     QTcpServer mServer;
     QList<SyncManagerSynchroniser *> mSyncers;
+    SIpcChannel mPeerAdvertiser;
 };
 
 #endif // SYNCADVERTISER_H

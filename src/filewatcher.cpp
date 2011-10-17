@@ -63,13 +63,24 @@ void FileWatcher::watchDirectoryTree(const QString &path)
     sDebug() << "Watching " << cleanedPath;
     mWatcher.addPath(cleanedPath);
 
-    QDirIterator it(path, QDir::AllEntries | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    QList<CachedFileInfo> fileList;
+    QDirIterator it(path, QDir::AllEntries | QDir::NoDotAndDotDot);
     while (it.hasNext()) {
-        const QString &dirName = it.next();
-        const QDir &dir(dirName);
-        if (mWatcher.directories().contains(QDir::cleanPath(dir.absolutePath())))
-            continue; // don't recurse endlessly
+        const QString &entryName = it.next();
+        QFileInfo fileInfo(entryName);
 
-        watchDirectoryTree(dir.absolutePath());
+        if (fileInfo.isDir()) {
+            const QDir &dir(entryName);
+            if (mWatcher.directories().contains(QDir::cleanPath(dir.absolutePath())))
+                continue; // don't recurse endlessly
+
+            watchDirectoryTree(dir.absolutePath());
+        } else {
+            CachedFileInfo fi;
+            fi = fileInfo;
+            fileList.append(fi);
+        }
     }
+
+    qDebug() << fileList.count() << " files in " << path;
 }
