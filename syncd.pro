@@ -15,19 +15,12 @@ SOURCES += src/main.cpp \
     src/syncadvertiser.cpp \
     src/syncmanagersynchroniser.cpp \
     src/syncmanager.cpp \
-    src/filewatcher.cpp \
-    src/bonjourserviceregister.cpp \
-    src/bonjourserviceresolver.cpp \
-    src/bonjourservicebrowser.cpp
+    src/filewatcher.cpp
 
 HEADERS += src/syncadvertiser.h \
     src/syncmanagersynchroniser.h \
     src/syncmanager.h \
-    src/filewatcher.h \
-    src/bonjourserviceregister.h \
-    src/bonjourrecord.h \
-    src/bonjourserviceresolver.h \
-    src/bonjourservicebrowser.h
+    src/filewatcher.h
 
 CONFIG += link_pkgconfig
 PKGCONFIG += saesu

@@ -20,14 +20,14 @@
 #include <QStringList>
 
 // Saesu
-#include "sglobal.h"
+#include <sglobal.h>
+#include <bonjourservicebrowser.h>
+#include <bonjourserviceresolver.h>
+#include <bonjourserviceregister.h>
 
 // Us
 #include "syncadvertiser.h"
 #include "syncmanagersynchroniser.h"
-#include "bonjourservicebrowser.h"
-#include "bonjourserviceresolver.h"
-#include "bonjourserviceregister.h"
 
 SyncAdvertiser::SyncAdvertiser(QObject *parent)
     : QObject(parent)

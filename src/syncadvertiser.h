@@ -22,8 +22,8 @@
 #include <QHostInfo>
 
 #include <sipcchannel.h>
+#include <bonjourrecord.h>
 
-#include "bonjourrecord.h"
 class BonjourServiceResolver;
 class SyncManagerSynchroniser;
 
