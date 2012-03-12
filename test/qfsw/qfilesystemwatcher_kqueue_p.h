@@ -60,6 +60,7 @@
 #include <QtCore/qthread.h>
 #include <QtCore/qvector.h>
 #include <QtCore/qsocketnotifier.h>
+#include <QtCore/qset.h>
 
 #ifndef QT_NO_FILESYSTEMWATCHER
 struct kevent;
@@ -74,6 +75,7 @@ public:
 
     static QKqueueFileSystemWatcherEngine *create(QObject *parent);
 
+    bool internalAddPath(const QString &path, QStringList *files, QStringList *directories);
     QStringList addPaths(const QStringList &paths, QStringList *files, QStringList *directories);
     QStringList removePaths(const QStringList &paths, QStringList *files, QStringList *directories);
 
@@ -85,6 +87,7 @@ private:
 
     int kqfd;
 
+    QSet<QString> reallyWatchedPaths;
     QHash<QString, int> pathToID;
     QHash<int, QString> idToPath;
     QSocketNotifier notifier;

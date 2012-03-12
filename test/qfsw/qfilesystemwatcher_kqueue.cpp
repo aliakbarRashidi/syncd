@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2012 Robin Burchell <robin+qt@viroteck.net>
 ** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/
 **
@@ -51,6 +52,7 @@
 #include <qfile.h>
 #include <qsocketnotifier.h>
 #include <qvarlengtharray.h>
+#include <qdiriterator.h>
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -69,6 +71,21 @@ QT_BEGIN_NAMESPACE
 
 QKqueueFileSystemWatcherEngine *QKqueueFileSystemWatcherEngine::create(QObject *parent)
 {
+    // the default open file count for OS X at least is absolutely ridiculous.
+    // raise it to something a little better.
+    int retval = 0;
+    struct rlimit rl;
+    retval = getrlimit(RLIMIT_NOFILE, &rl);
+    if (retval == -1)
+        perror("QKqueueFileSystemWatcherEngine: getrlimit");
+
+    rl.rlim_cur = (OPEN_MAX < RLIM_INFINITY) ? OPEN_MAX : RLIM_INFINITY;
+    DEBUG() << "QKqueueFileSystemWatcherEngine: increasing fd limit to " << rl.rlim_cur;
+
+    retval = setrlimit(RLIMIT_NOFILE, &rl);
+    if (retval == -1)
+        perror("QKqueueFileSystemWatcherEngine: setrlimit");
+
     int kqfd = kqueue();
     if (kqfd == -1)
         return 0;
@@ -94,6 +111,96 @@ QKqueueFileSystemWatcherEngine::~QKqueueFileSystemWatcherEngine()
         ::close(id < 0 ? -id : id);
 }
 
+bool QKqueueFileSystemWatcherEngine::internalAddPath(const QString &path,
+                                                     QStringList *files,
+                                                     QStringList *directories)
+{
+    int fd;
+#if defined(O_EVTONLY)
+    fd = qt_safe_open(QFile::encodeName(path), O_EVTONLY);
+#else
+    fd = qt_safe_open(QFile::encodeName(path), O_RDONLY);
+#endif
+    if (fd == -1) {
+        perror("QKqueueFileSystemWatcherEngine::addPaths: open");
+        return false;
+    }
+    if (fd >= (int)FD_SETSIZE / 2 && fd < (int)FD_SETSIZE) {
+        int fddup = fcntl(fd, F_DUPFD, FD_SETSIZE);
+        if (fddup != -1) {
+            ::close(fd);
+            fd = fddup;
+        }
+    }
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+
+    QT_STATBUF st;
+    if (QT_FSTAT(fd, &st) == -1) {
+        perror("QKqueueFileSystemWatcherEngine::addPaths: fstat");
+        ::close(fd);
+        return false;
+    }
+    int id = (S_ISDIR(st.st_mode)) ? -fd : fd;
+    if (id < 0) {
+        if (directories->contains(path)) {
+            ::close(fd);
+            return false;
+        }
+    } else {
+        if (files->contains(path)) {
+            ::close(fd);
+            return false;
+        }
+    }
+
+    struct kevent kev;
+    EV_SET(&kev,
+            fd,
+            EVFILT_VNODE,
+            EV_ADD | EV_ENABLE | EV_CLEAR,
+            NOTE_DELETE | NOTE_WRITE | NOTE_EXTEND | NOTE_ATTRIB | NOTE_RENAME | NOTE_REVOKE,
+            0,
+            0);
+    if (kevent(kqfd, &kev, 1, 0, 0, 0) == -1) {
+        perror("QKqueueFileSystemWatcherEngine::addPaths: kevent");
+        ::close(fd);
+        return false;
+    }
+
+    if (id < 0) {
+        DEBUG() << "QKqueueFileSystemWatcherEngine: added directory path" << path;
+        directories->append(path);
+
+        // when adding a directory, we also need to iterate the contents
+        // of the directory, and watch all files in it to get directory
+        // notifications, as kqueue does not provide directory-level monitoring
+        // of changes.
+        QDirIterator di(path);
+
+        while (di.hasNext()) {
+            const QString &subPath = di.next();
+            QFileInfo fi(subPath);
+
+            // TODO: failure handling. if we fail to watch something inside the
+            // directory, we must un-watch everything we just watched, and
+            // indicate failure.
+            //
+            // the cause for failure is _probably_ hitting RLIMIT_NOFILE, which
+            // shouldn't happen (except in morbid cases), since we explicitly
+            // set that pretty high.
+            if (fi.isFile())
+                internalAddPath(subPath, files, directories);
+        }
+    } else {
+        DEBUG() << "QKqueueFileSystemWatcherEngine: added file path" << path;
+        files->append(path);
+    }
+
+    pathToID.insert(path, id);
+    idToPath.insert(id, path);
+    return true;
+}
+
 QStringList QKqueueFileSystemWatcherEngine::addPaths(const QStringList &paths,
                                                      QStringList *files,
                                                      QStringList *directories)
@@ -102,69 +209,11 @@ QStringList QKqueueFileSystemWatcherEngine::addPaths(const QStringList &paths,
     QMutableListIterator<QString> it(p);
     while (it.hasNext()) {
         QString path = it.next();
-        int fd;
-#if defined(O_EVTONLY)
-        fd = qt_safe_open(QFile::encodeName(path), O_EVTONLY);
-#else
-        fd = qt_safe_open(QFile::encodeName(path), O_RDONLY);
-#endif
-        if (fd == -1) {
-            perror("QKqueueFileSystemWatcherEngine::addPaths: open");
-            continue;
-        }
-        if (fd >= (int)FD_SETSIZE / 2 && fd < (int)FD_SETSIZE) {
-            int fddup = fcntl(fd, F_DUPFD, FD_SETSIZE);
-            if (fddup != -1) {
-                ::close(fd);
-                fd = fddup;
-            }
-        }
-        fcntl(fd, F_SETFD, FD_CLOEXEC);
 
-        QT_STATBUF st;
-        if (QT_FSTAT(fd, &st) == -1) {
-            perror("QKqueueFileSystemWatcherEngine::addPaths: fstat");
-            ::close(fd);
-            continue;
-        }
-        int id = (S_ISDIR(st.st_mode)) ? -fd : fd;
-        if (id < 0) {
-            if (directories->contains(path)) {
-                ::close(fd);
-                continue;
-            }
-        } else {
-            if (files->contains(path)) {
-                ::close(fd);
-                continue;
-            }
-        }
+        if (internalAddPath(path, files, directories))
+            it.remove();
 
-        struct kevent kev;
-        EV_SET(&kev,
-               fd,
-               EVFILT_VNODE,
-               EV_ADD | EV_ENABLE | EV_CLEAR,
-               NOTE_DELETE | NOTE_WRITE | NOTE_EXTEND | NOTE_ATTRIB | NOTE_RENAME | NOTE_REVOKE,
-               0,
-               0);
-        if (kevent(kqfd, &kev, 1, 0, 0, 0) == -1) {
-            perror("QKqueueFileSystemWatcherEngine::addPaths: kevent");
-            ::close(fd);
-            continue;
-        }
-
-        it.remove();
-        if (id < 0) {
-            DEBUG() << "QKqueueFileSystemWatcherEngine: added directory path" << path;
-            directories->append(path);
-        } else {
-            DEBUG() << "QKqueueFileSystemWatcherEngine: added file path" << path;
-            files->append(path);
-        }
-
-        pathToID.insert(path, id);
-        idToPath.insert(id, path);
+        reallyWatchedPaths.insert(path);
     }
 
     return p;
@@ -190,10 +239,25 @@ QStringList QKqueueFileSystemWatcherEngine::removePaths(const QStringList &paths
         ::close(id < 0 ? -id : id);
 
         it.remove();
-        if (id < 0)
+        if (id < 0) {
+            // when removing a directory, we also need to iterate the contents
+            // of the directory, and remove watches on all files that aren't
+            // explicitly being monitored for changes.
+            QDirIterator di(path);
+
+            while (di.hasNext()) {
+                const QString &subPath = di.next();
+                QFileInfo fi(subPath);
+                if (fi.isFile() && !reallyWatchedPaths.contains(subPath))
+                    removePaths(QStringList() << subPath, files, directories);
+            }
+
             directories->removeAll(path);
-        else
+        } else {
             files->removeAll(path);
+        }
+
+        reallyWatchedPaths.remove(path);
     }
     isEmpty = pathToID.isEmpty();
 
@@ -242,17 +306,36 @@ void QKqueueFileSystemWatcherEngine::readFromKqueue()
                 idToPath.remove(id);
                 ::close(fd);
 
-                if (id < 0)
-                    emit directoryChanged(path, true);
-                else
-                    emit fileChanged(path, true);
+                if (reallyWatchedPaths.contains(path)) {
+                    qDebug("Emitting removed for really watched path %s",
+                            qPrintable(path));
+                    if (id < 0)
+                        emit directoryChanged(path, true);
+                    else
+                        emit fileChanged(path, true);
+                }
             } else {
                 DEBUG() << path << "changed";
 
-                if (id < 0)
-                    emit directoryChanged(path, false);
-                else
-                    emit fileChanged(path, false);
+                if (reallyWatchedPaths.contains(path)) {
+                    qDebug("Emitting changed for really watched path %s",
+                            qPrintable(path));
+                    if (id < 0)
+                        emit directoryChanged(path, false);
+                    else
+                        emit fileChanged(path, false);
+                }
+
+                QFileInfo fi(path);
+                const QString &parentDirectory = fi.path();
+                if (reallyWatchedPaths.contains(parentDirectory)) {
+                    // if we're watching the parent directory instead (or as
+                    // well), then we need to emit a directoryChanged
+                    // notification for it.
+                    qDebug("Emitting changed for parent directory of %s",
+                            qPrintable(path));
+                    emit directoryChanged(parentDirectory, false);
+                }
             }
         }
 
